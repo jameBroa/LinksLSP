@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <style>
+            :root {
+                --vscode-background: var(--vscode-editor-background);
+                --vscode-foreground: var(--vscode-editor-foreground);
+                --input-background: var(--vscode-input-background);
+                --input-foreground: var(--vscode-input-foreground);
+                --button-background: var(--vscode-button-background);
+                --button-foreground: var(--vscode-button-foreground);
+                --button-hover-background: var(--vscode-button-hoverBackground);
+            }
+
+            body {
+                padding: 1rem;
+                color: var(--vscode-foreground);
+                font-family: var(--vscode-font-family);
+                font-size: var(--vscode-font-size);
+                line-height: 1.4;
+                background: var(--vscode-background);
+            }
+
+            .main {
+                max-width: 800px;
+                margin: 0 auto;
+                display: flex;
+                flex-direction: column;
+                gap: 1.5rem;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+                font-weight: 600;
+                margin: 0;
+                color: var(--vscode-foreground);
+            }
+
+            p {
+                margin: 0;
+                line-height: 1.5;
+            }
+
+            .dropdown-section {
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+                max-width:95%;
+            }
+
+            .dropdown-header {
+                display: flex;
+                align-items: center;
+                padding: 0.75rem 1rem;
+                background: var(--vscode-panel-background);
+                cursor: pointer;
+                user-select: none;
+            }
+
+            .dropdown-header:hover {
+                background: var(--vscode-list-hoverBackground);
+            }
+
+            .dropdown-header h4 {
+                margin: 0;
+                font-size: 1rem;
+            }
+
+            #dropdown-open-indicator {
+                margin-right: 0.5rem;
+                font-weight: bold;
+            }
+
+            #dropdown-open-indicator-table {
+                margin-right: 0.5rem;
+                font-weight: bold;
+            }
+
+            #dropdown-content-db {
+                padding: 1rem;
+                display: none;
+                flex-direction: column;
+                gap: 1rem;
+                background: var(--vscode-editor-background);
+            }
+
+            #dropdown-content-table{
+                padding: 1rem;
+                display: none;
+                flex-direction: column;
+                gap: 1rem;
+                background: var(--vscode-editor-background);
+            }
+            .select-menu {
+                width: 100%;
+                padding: 0.5rem;
+                background: var(--input-background);
+                color: var(--input-foreground);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 2px;
+            }
+            
+            .forms p{
+                width:2rem;
+            }
+
+            .forms {
+                display: flex;
+                flex-direction: row;
+                gap: 1rem;
+                justify-content: space-evenly;
+                align-items: center;
+                width:100%;
+            }
+            
+
+            .text-input {
+                padding: 0.5rem;
+                background: var(--input-background);
+                color: var(--input-foreground);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 2px;
+                width: 100%;
+                max-width:96%;
+            }
+
+            button {
+                padding: 0.5rem 1rem;
+                background: var(--button-background);
+                color: var(--button-foreground);
+                border: none;
+                border-radius: 2px;
+                cursor: pointer;
+                font-size: 0.9rem;
+            }
+
+            button:hover {
+                background: var(--button-hover-background);
+            }
+
+            .underline {
+                border-bottom: 1px solid var(--vscode-panel-border);
+                padding-bottom: 0.5rem;
+                margin-top: 1rem;
+                font-weight: 500;
+            }
+
+            #confirm-details, #creds {
+                color: var(--vscode-textPreformat-foreground);
+                font-family: var(--vscode-editor-font-family);
+                padding: 0.5rem;
+                background: var(--vscode-textCodeBlock-background);
+                border-radius: 2px;
+            }
+        </style>
+        <script>
+            const vscode = acquireVsCodeApi();
+
+            function toggleDropdown(sectionId, symbolId) {
+                const content = document.getElementById(sectionId);
+                const symbol = document.getElementById(symbolId);
+                const isOpen = content.style.display === 'flex';
+                content.style.display = isOpen ? 'none' : 'flex';
+                symbol.textContent = isOpen ? '+' : '-';
+            }
+
+            function handleDriverInfoSubmit(hostId, portId) {
+                const hostInfo = document.getElementById(hostId);
+                const portInfo = document.getElementById(portId);
+                vscode.postMessage({
+                    command: 'driverInfoSubmit',
+                    host: hostInfo.value,
+                    port: portInfo.value
+                });
+            }
+
+            function handleDriverCredentialsSubmit(userId, passId) {
+                const user = document.getElementById(userId);
+                const pass = document.getElementById(passId);
+                vscode.postMessage({
+                    command: 'driverCredSubmit',
+                    username: user.value,
+                    password: pass.value
+                });
+            }
+
+            function getDatabases() {
+                vscode.postMessage({
+                    command: 'getDatabases'
+                });
+            }
+
+            function handleDriverChange(newDriver) {
+                vscode.postMessage({
+                    command: 'driverChanged',
+                    driver: newDriver
+                });
+            }
+
+            function handleDatabaseSelect(new_database) {
+                vscode.postMessage({
+                    command: 'databaseSelect',
+                    database: new_database
+                });
+            }
+            
+            function handleGenerateTableCode(table_name) {
+                vscode.postMessage({
+                    command:"generateCodeTable",
+                    table:table_name
+                })
+            }
+
+            function fill_select(select_id, list_of_options) {
+                const main_item = document.getElementById(select_id);
+                main_item.innerHTML = '';
+                list_of_options.forEach(item => {
+                    const option = document.createElement('option');
+                    option.text = item;
+                    option.value = item;
+                    main_item.add(option);
+                });
+            }
+
+
+
+            window.addEventListener('message', event => {
+                const message = event.data;
+                switch(message.command) {
+                    case 'confirmDriverInfo':
+                        document.getElementById('confirm-details').textContent = message.data.host;
+                        break;
+                    case 'confirmUserCreds':
+                        document.getElementById('creds').textContent = message.data.username;
+                        break;
+                    case 'allDatabases':
+                        const dbSelect = document.getElementById('database-options');
+                        dbSelect.innerHTML = '';
+                        message.databases.forEach(database => {
+                            const option = document.createElement('option');
+                            option.text = database;
+                            option.value = database;
+                            dbSelect.add(option);
+                        });
+                        break;
+                    case 'allTables':
+                        fill_select('tables-options', message.tables)
+                        fill_select('select-table-for-generation', message.tables);
+                        break;
+                }
+            });
+        </script>
+    </head>
+    <body>
+        <div class="main">
+            <h1>Links Plugin</h1>
+            <p>Use this page to configure settings for your links setup.</p>
+            <p>This extension was created by James Broadhurst for his dissertation project at The University of Edinburgh</p>
+            
+
+            <div class="dropdown-section">
+                <div class="dropdown-header" onclick="toggleDropdown('dropdown-content-table', 'dropdown-open-indicator-table')">
+                    <h4 id="dropdown-open-indicator-table">+</h4>
+                    <h4>Table manipulation</h4>
+                </div>
+                <div id="dropdown-content-table">
+                    <p class="underline">Automatic code generation</p>
+                    <p>Select table to add:</p>
+                    <select class="select-menu" id="select-table-for-generation">
+                        <!-- Filled with options -->
+                    </select>
+                    <button onclick="handleGenerateTableCode(document.getElementById('select-table-for-generation').value)">
+                        Generate code
+                    </button>
+                </div>
+
+            </div>
+
+            <div class="dropdown-section">
+                <div class="dropdown-header" onclick="toggleDropdown('dropdown-content-db', 'dropdown-open-indicator')">
+                    <h4 id="dropdown-open-indicator">+</h4>
+                    <h4>Database setup</h4>
+                </div>
+
+                <div id="dropdown-content-db">
+                    <p>This section will help you configure your Links DB setup</p>
+                    
+                    <div id="database-driver-selection">
+                        <p>Driver: </p>
+                        <select class="select-menu" onchange="handleDriverChange(this.value)">
+                            <option value="MySQL">MySQL</option>
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="SQlite">SQlite</option>
+                        </select>
+                    </div>
+
+                    <p class="underline">Driver info</p>
+                    <div class="forms">
+                        <p>Host</p>
+                        <input class="text-input" type="text" id="host-info">
+                    </div>
+                    <div class="forms">
+                        <p>Port</p>
+                        <input class="text-input" type="text" id="port-info">
+                    </div>
+
+                    <button onclick="handleDriverInfoSubmit('host-info', 'port-info')">
+                        Submit driver info
+                    </button>
+
+                    <p id="confirm-details">Waiting for connection...</p>
+
+                    <p class="underline">Driver credentials</p>
+                    <div class="forms">
+                        <p>User</p>
+                        <input class="text-input" type="text" id="user-info">
+                    </div>
+                    <div class="forms">
+                        <p>Pass</p>
+                        <input class="text-input" type="password" id="pass-info">
+                    </div>
+
+                    <p id="creds">No credentials submitted</p>
+
+                    <button onclick="handleDriverCredentialsSubmit('user-info', 'pass-info')">
+                        Submit driver credentials
+                    </button>
+
+                    <button onclick="getDatabases()">
+                        Get databases
+                    </button>
+
+                    <p class="underline">Database</p>
+                    <select class="select-menu" id="database-options" onchange="handleDatabaseSelect(this.value)">
+                    </select>
+
+                    <p class="underline">Tables</p>
+                    <select class="select-menu" id="tables-options">
+
+                    </select>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>

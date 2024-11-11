@@ -1,0 +1,111 @@
+{
+  "name": "links",
+  "displayName": "links-lang-lsp",
+  "description": "LSP for the Links programming language",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:links",
+    "onCommand:extension.commandName"
+  ],
+  "main": "./dist/client/src/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id":"linksDatabase",
+          "title": "Links DB",
+          "icon":"./icons/links-logo.svg"
+        }
+      ]
+    },
+    "views": {
+      "linksDatabase": [
+        {
+          "id":"linksDatabaseView",
+          "name": "Database setup",
+          "type":"webview"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "links",
+        "aliases": [
+          "Links",
+          "links-lang"
+        ],
+        "extensions": [
+          ".links"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light":"./icons/links-logo.svg",
+          "dark":"./icons/links-logo.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "links",
+        "scopeName": "source.links",
+        "path": "./syntaxes/links.tmLanguage.json",
+        "embeddedLanguages": {
+            "meta.embedded.html": "html"
+          }
+      }
+    ],
+    "commands": [
+      {
+        "command": "extension.executeFile",
+        "title": "Execute Links File",
+        "icon": "$(play)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "extension.executeFile",
+          "when":"resourceLangId == links",
+          "group":"navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint server/src && eslint client/src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.8",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.94.0",
+    "@typescript-eslint/eslint-plugin": "^8.8.1",
+    "@typescript-eslint/parser": "^8.8.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.11.1",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.6.2"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1"
+  }
+}

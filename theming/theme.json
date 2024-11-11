@@ -1,0 +1,41 @@
+    // "themes": [
+    //   {
+    //     "label": "Links theme",
+    //     "uiTheme":"vs-dark",
+    //     "path":"./theming/theme.json"
+    //   }
+    // ]
+
+{
+    "name": "Links theme",
+    "type":"dark",
+    "colors": {
+        "editor.foreground":"#ffffff"
+    },
+    "tokenColors": [
+        {
+            "scope":"keyword.operator.links",
+            "settings": {
+                "foreground":"#ff0000"
+            }
+        },
+        {
+            "scope":"comment.line.pound.links",
+            "settings" : {
+                "foreground":"#648B50"
+            }
+        },
+        {
+            "scope":"links.html",
+            "settings": {
+                "foreground":"#a4a1ff"
+            }
+        },
+        {
+            "scope":"keyword.control.page.links",
+            "settings": {
+                "foreground":"#ff0000"
+            }
+        }
+    ]
+}
