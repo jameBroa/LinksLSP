@@ -1,20 +1,23 @@
-# links README
+# LinksLSP
 
-This is the README for your extension "links". After writing up a brief description, we recommend including the following sections.
+This repo contains an implementation of a VSCODE Extension for the programming langauge Links. The original aim of this project was to implement a Language Server Protocol for the language, however, the project has evolved to include extra features to enhance the development experience. This project is made as part of my final year dissertation project at The University of Edinburgh.
 
 ## Features
+- VSCode 'Links' area to
+    - Check what tables exist in your database
+    - Automatic code generation based on table selection
+- Code completion on table initialization from a variable of database type
+- 'Links' icon
+- Execute current code 'button'
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+## Future plans
+More features which typically exist in an LSP will be implemented. This includes capabilities like 'Syntax highlighting' as well as autocomplete, goToFunction definition etc. 
 
-For example if there is an image subfolder under your extension project workspace:
+## Running locally
+Since this is a VSCode extension with an LSP, there are two code bases in this repo. The first is the 'client' and the second is the 'server' where Both are written in Typescript. To install dependencies on both, navigate to either `./client` or `./server` and run the command `npm install`.
 
-\!\[feature X\]\(images/feature-x.png\)
+To test the extension locally, open the code base in VSCode and start the extension from the 'Run and Debug' section.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
 
 ## Extension Settings
 
