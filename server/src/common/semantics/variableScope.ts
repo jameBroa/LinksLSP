@@ -1,6 +1,6 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { SemanticTokensParams, SemanticTokensBuilder } from "vscode-languageserver/node";
-import { GlobalLogger } from '../../extension';
+// import { GlobalLogger } from '../../extension';
 
 
 

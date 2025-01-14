@@ -9,6 +9,7 @@ This repo contains an implementation of a VSCODE Extension for the programming l
 - Code completion on table initialization from a variable of database type
 - 'Links' icon
 - Execute current code 'button'
+- OnReferences for Function implementations and parameters for Variables
 
 ## Future plans
 More features which typically exist in an LSP will be implemented. This includes capabilities like 'Syntax highlighting' as well as autocomplete, goToFunction definition etc. 

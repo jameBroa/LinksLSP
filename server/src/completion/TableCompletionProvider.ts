@@ -8,7 +8,7 @@ import {
     Connection
   } from 'vscode-languageserver/node';
   import { CustomRequests } from './shared/types';
-import { GlobalLogger, TableColumn } from '../extension';
+import {TableColumn } from '../extension';
 
 
  
@@ -117,7 +117,7 @@ import { GlobalLogger, TableColumn } from '../extension';
           return [];
         }
     
-        GlobalLogger.log("Starting to provide completions");
+        // GlobalLogger.log("Starting to provide completions");
     
         // Create completion items for all tables since we don't have a partial match yet
         const completionPromises = this.tableNames.map(async tableName => {

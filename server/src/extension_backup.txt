@@ -1,0 +1,471 @@
+let connection = createConnection(ProposedFeatures.all);
+export const GlobalLogger = new LinksLSPLogger(connection);
+
+// Create a simple text document manager.
+let documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
+
+let hasConfigurationCapability: boolean = false;
+let hasWorkspaceFolderCapability: boolean = false;
+let hasDiagnosticRelatedInformationCapability: boolean = false;
+
+connection.onInitialize((params: InitializeParams) => {
+  let capabilities = params.capabilities;
+
+  // Does the client support the `workspace/configuration` request?
+  // If not, we fall back using global settings.
+  hasConfigurationCapability = !!(
+    capabilities.workspace && !!capabilities.workspace.configuration
+  );
+  hasWorkspaceFolderCapability = !!(
+    capabilities.workspace && !!capabilities.workspace.workspaceFolders
+  );
+  hasDiagnosticRelatedInformationCapability = !!(
+    capabilities.textDocument &&
+    capabilities.textDocument.publishDiagnostics &&
+    capabilities.textDocument.publishDiagnostics.relatedInformation
+  );
+
+  const result: InitializeResult = {
+    capabilities: {
+      // definitionProvider: indicates 'goToDefinition' is supported
+      definitionProvider: true,
+      //referenceProvider: finds references of things in the document(currently supports functions)
+      referencesProvider: true,
+      hoverProvider: true,
+      textDocumentSync: TextDocumentSyncKind.Incremental,
+      // Tell the client that this server supports code completion.
+      semanticTokensProvider: {
+        legend: {
+          tokenTypes: ["signature", "function", "variable", "comment"],
+          tokenModifiers: []
+        },
+        full:true,
+        range:true
+      },
+      completionProvider: {
+        resolveProvider: true,
+        triggerCharacters:['e', " "]
+      }
+    }
+  };
+  if (hasWorkspaceFolderCapability) {
+    result.capabilities.workspace = {
+      workspaceFolders: {
+        supported: true
+      }
+    };
+  }
+  return result;
+});
+
+connection.onInitialized(() => {
+  if (hasConfigurationCapability) {
+    // Register for all configuration changes.
+    connection.client.register(DidChangeConfigurationNotification.type, undefined);
+  }
+  if (hasWorkspaceFolderCapability) {
+    connection.workspace.onDidChangeWorkspaceFolders(_event => {
+      connection.console.log('Workspace folder change event received.');
+    });
+  }
+});
+
+
+
+// Gets all references of a var/function
+connection.onReferences((params: ReferenceParams): Location[] => {
+  GlobalLogger.log("We are about to do onReference");
+  const document = documents.get(params.textDocument.uri);
+
+  if(!document) {
+    return [];
+  }
+  const text = document.getText();
+  const lines = text.split(/\r?\n/g);
+  const word = InfoRetriever.getWordAtPosition(lines, params.position);
+  const locations: Location[] = [];
+  for(let i = 0; i < lines.length; i++){
+    const line = lines[i];
+    let match;
+    const regex = new RegExp(`\\b${word}\\b`, 'g');    
+    while ((match = regex.exec(line)) !== null) {
+      locations.push(Location.create(
+        params.textDocument.uri,
+        Range.create(
+          Position.create(i, match.index),
+          Position.create(i, match.index + word.length)
+        )
+      ));
+    }
+  }
+  GlobalLogger.log(JSON.stringify(locations));
+  return locations;
+});
+
+connection.onDefinition((params: TextDocumentPositionParams): Location | null => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) {
+    return null;
+  }
+  const text = document.getText();
+  const lines = text.split(/\r?\n/g);
+  const word = InfoRetriever.getWordAtPosition(lines, params.position);
+  GlobalLogger.log(`word: ${word}`);
+  for(let i = 0; i < lines.length; i++){
+    const line = lines[i];
+    const match = new RegExp(`fun\\s+${word}\\s*\\(`).exec(line);
+    if(match){
+      return Location.create(
+        params.textDocument.uri, 
+        Range.create(
+          Position.create(i, match.index), 
+          Position.create(i, match.index + match[0].length)
+        )
+      );
+    }
+  }
+  return null;
+});
+
+//Todo: Make the onHover, onDefinition, and onReference start thing a separate function bc its ridiculous right now
+// What i'm referring to here is the: const document = documents.get(params.textDocument.uri); if (!document) { return null; } part
+connection.onHover((params: TextDocumentPositionParams): Hover | null => {
+
+  const document = documents.get(params.textDocument.uri);
+  if(!document) {
+    return null;
+  }
+
+  const text = document.getText();
+
+
+  GlobalLogger.log(`text (HERE): ${text}`);
+
+  let text_to_send = text;
+  text_to_send = text_to_send.replace(/\s+/g, ' ').trim();
+
+
+  const client = new net.Socket();
+  client.connect(8081, '127.0.0.1', () => {
+    client.write(`${text_to_send}\n`);
+  });
+
+  client.on('data', (data) => {
+    GlobalLogger.log(`Received: ${JSON.stringify(JSON.parse(data.toString()), null, 2)}`);
+    client.destroy();
+  });
+
+
+
+
+
+
+
+
+  const lines = text.split(/\r?\n/g);
+  const word = InfoRetriever.getWordAtPosition(lines, params.position);
+  const functionRegex = new RegExp(`fun\\s+${word}\\s*\\(([^)]*)\\)\\s*{`);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = functionRegex.exec(line);
+    if (match) {
+      const hoverContent: MarkupContent = {
+        kind: 'markdown',
+        value: `\`\`\`plaintext\n${match[0]}\n\`\`\``
+      };
+      return {
+        contents: hoverContent,
+        range: Range.create(
+          Position.create(i, match.index),
+          Position.create(i, match.index + match[0].length)
+        )
+      };
+    }
+  }
+  return null;
+});
+
+// The example settings
+interface ExampleSettings {
+  maxNumberOfProblems: number;
+}
+
+// The global settings, used when the `workspace/configuration` request is not supported by the client.
+// Please note that this is not the case when using this server with the client provided in this example
+// but could happen with other clients.
+const defaultSettings: ExampleSettings = { maxNumberOfProblems: 1000 };
+let globalSettings: ExampleSettings = defaultSettings;
+
+// Cache the settings of all open documents
+let documentSettings: Map<string, Thenable<ExampleSettings>> = new Map();
+
+connection.onDidChangeConfiguration(change => {
+  if (hasConfigurationCapability) {
+    // Reset all cached document settings
+    documentSettings.clear();
+  } else {
+    globalSettings = <ExampleSettings>(
+      (change.settings.languageServerExample || defaultSettings)
+    );
+  }
+
+  // Revalidate all open text documents
+  documents.all().forEach(validateTextDocument);
+});
+
+function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
+  if (!hasConfigurationCapability) {
+    return Promise.resolve(globalSettings);
+  }
+  let result = documentSettings.get(resource);
+  if (!result) {
+    result = connection.workspace.getConfiguration({
+      scopeUri: resource,
+      section: 'languageServerExample'
+    });
+    documentSettings.set(resource, result);
+  }
+  return result;
+}
+
+// Only keep settings for open documents
+documents.onDidClose(e => {
+  documentSettings.delete(e.document.uri);
+});
+
+// The content of a text document has changed. This event is emitted
+// when the text document first opened or when its content has changed.
+documents.onDidChangeContent(async change => {
+  validateTextDocument(change.document);
+});
+
+// function logToClient(message: string) {
+//   connection.sendNotification("custom/logMessage", message);
+// }
+
+async function validateTextDocument(textDocument: TextDocument): Promise<void> {
+  // In this simple example we get the settings for every validate run.
+  let settings = await getDocumentSettings(textDocument.uri);
+
+  // The validator creates diagnostics for all uppercase words length 2 and more
+  let text = textDocument.getText();
+  let pattern = /\b[A-Z]{2,}\b/g;
+  let m: RegExpExecArray | null;
+
+  let problems = 0;
+  let diagnostics: Diagnostic[] = [];
+  
+
+  while ((m = pattern.exec(text)) && problems < 1000) { //hardcoded for now
+    problems++;
+    let diagnostic: Diagnostic = {
+      severity: DiagnosticSeverity.Warning,
+      range: {
+        start: textDocument.positionAt(m.index),
+        end: textDocument.positionAt(m.index + m[0].length)
+      },
+      message: `${m[0]} is all uppercase.`,
+      source: 'ex'
+    };
+    if (hasDiagnosticRelatedInformationCapability) {
+      diagnostic.relatedInformation = [
+        {
+          location: {
+            uri: textDocument.uri,
+            range: Object.assign({}, diagnostic.range)
+          },
+          message: 'Spelling matters'
+        },
+        {
+          location: {
+            uri: textDocument.uri,
+            range: Object.assign({}, diagnostic.range)
+          },
+          message: 'Particularly for names'
+        }
+      ];
+    }
+    diagnostics.push(diagnostic);
+  }
+
+
+
+
+  // Send the computed diagnostics to VS Code.
+  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+}
+
+connection.onDidChangeWatchedFiles(_change => {
+  // Monitored files have change in VS Code
+  connection.console.log('We received a file change event');
+});
+
+let db_tables: string[];
+let db_schemas: Map<string, Array<{columnName:string, dataType: string}>>;
+
+
+
+
+export interface TableColumn {
+  columnName: string,
+  dataType: string
+}
+
+// For CODE COMPLETION on table write
+connection.onNotification('custom/updateDatabaseConfig', (config) => {
+  let tables: string[] = config.keys;
+  let schemas: Map<string, TableColumn[]> = new Map<string, TableColumn[]>(config.allSchemas);
+
+  GlobalLogger.log("entries");
+  GlobalLogger.log(JSON.stringify([...schemas.entries()]));
+
+  
+  db_tables = tables;
+  db_schemas = schemas;
+});
+
+
+// On completion table stuff!!!
+connection.onCompletion(
+  async (params: TextDocumentPositionParams): Promise<CompletionItem[]> => {
+    GlobalLogger.log("We are about to do onCompletion");
+    if(db_tables !== undefined && db_schemas !== undefined) {
+      const provider = new TableCompletionProvider(db_tables, db_schemas); // need to pass in tables and schemas
+      const document = documents.get(params.textDocument.uri);
+      if (!document) {
+        return [];
+      }
+      const eg_working = [{"label":"accounts","kind":15,"detail":"Table: accounts","documentation":{"kind":"markdown","value":"Columns:\n- id: integer\n- accounttype: text\n- balance: double precision"},"insertTextFormat":2,"textEdit":{"range":{"start":{"line":7,"character":21},"end":{"line":7,"character":29}},"newText":"\"accounts\" with (id: Int, accounttype: String, balance: Float) from db;"}}];
+      // return eg_working as CompletionItem[];
+      const completion = await provider.provideCompletions(document, params.position);
+      GlobalLogger.log(`completion from onCompletion: ${JSON.stringify(completion)}`);
+      
+      GlobalLogger.log(`${eg_working === completion}`);
+      GlobalLogger.log(`eg_working: ${JSON.stringify(eg_working)}`);
+      // return [{"label":"accounts","kind":15,"detail":"Table: accounts","documentation":{"kind":"markdown","value":"Columns:\n- id: integer\n- accounttype: text\n- balance: double precision"},"insertTextFormat":2,"textEdit":{"range":{"start":{"line":7,"character":23},"end":{"line":7,"character":29}},"newText":"\"accounts\" with (id: Int, accounttype: String, balance: Float) from db;"}}];
+      return completion;
+
+    } else {
+      return [];
+    }
+  });
+
+
+
+
+
+// This handler provides the initial list of the completion items.
+// Not sure if this actually ever got executed
+// connection.onCompletion(
+//   (_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
+//     // The pass parameter contains the position of the text document in
+//     // which code complete got requested. For the example we ignore this
+//     // info and always provide the same completion items.
+//     return [
+//       {
+//         label: 'TypeScript',
+//         kind: CompletionItemKind.Text,
+//         data: 1
+//       },
+//       {
+//         label: 'JavaScript',
+//         kind: CompletionItemKind.Text,
+//         data: 2
+//       }
+//     ];
+//   }
+// );
+
+// This function is responsible for dealing with semantics defined in connection.onInitialize()
+// connection.languages.semanticTokens.on((params: SemanticTokensParams): SemanticTokens => {
+  
+//   const tokens = [];
+//   const document = documents.get(params.textDocument.uri);
+
+//   if(!document) {
+//     return {data: []} as unknown as SemanticTokens;
+//   }
+
+//   const text = document.getText();
+//   const keywordPattern = /\b(fun|var|if|else|for|while)\b/g;
+//   let match;
+//   const builder = new SemanticTokensBuilder();
+  
+
+//   while((match = keywordPattern.exec(text)) !== null) {
+//     const pos = document.positionAt(match.index);
+//     builder.push(
+//       pos.line,
+//       pos.character,
+//       match[0].length,
+//       0,
+//       0
+//     );
+//   }
+//   return builder.build();
+// });
+
+// connection.languages.semanticTokens.onRange(params: SemanticTokensParams): SemanticTokens => {
+// }
+
+
+// This handler resolves additional information for the item selected in
+// the completion list.
+
+
+// ["signature", "function", "variable", "comment"]
+connection.onRequest("textDocument/semanticTokens/full", (params) => {
+  const document = documents.get(params.textDocument.uri);
+  if(!document) {
+    return {data: []} as unknown as SemanticTokens;
+  }
+
+  const text = document.getText();
+
+  let match;
+  let builder = new SemanticTokensBuilder();
+
+  builder = BuildVarSemantics(params, text, document, builder);
+
+  // while((match = keywordPattern.exec(text)) !== null) {
+  //   const pos = document.positionAt(match.index);
+  //   builder.push(
+  //     pos.line,
+  //     pos.character,
+  //     match[0].length,
+  //     0,
+  //     0
+  //   );
+  // }
+  return builder.build();
+});
+
+connection.onRequest("textDocument/semanticTokens/range", (params) => {
+  const semanticTokens = {data: []} as unknown as SemanticTokens;
+  console.log("some semantic stuff related to /range is happening!");
+  return semanticTokens;
+});
+
+
+connection.onCompletionResolve(
+  (item: CompletionItem): CompletionItem => {
+    if (item.data === 1) {
+      item.detail = 'TypeScript details';
+      item.documentation = 'TypeScript documentation';
+    } else if (item.data === 2) {
+      item.detail = 'JavaScript details';
+      item.documentation = 'JavaScript documentation';
+    }
+    return item;
+  }
+);
+
+// Make the text document manager listen on the connection
+// for open, change and close text document events
+documents.listen(connection);
+
+// Listen on the connection
+connection.listen();
+
+
