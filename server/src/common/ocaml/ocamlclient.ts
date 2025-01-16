@@ -1,30 +1,15 @@
 import * as net from 'net';
 
 export class OCamlClient{
-    // private client: net.Socket;
     private connection_url: string;
     private connection_port: number;
-    // private connected: boolean;
 
     constructor() {
-        // this.client = new net.Socket();
         this.connection_url = '127.0.0.1';
         this.connection_port = 8081;
-        // this.connected = false;
     }
 
-    // public connect(): boolean {
-    //     if(!this.connected){
-    //         this.client.connect(this.connection_port, this.connection_url);
-    //         this.connected = true;
-    //         return true;
-    //     }
-    //     return false;
-    // }
-
     private connect(): Promise<net.Socket> {
-        
-
         return new Promise((resolve, reject) => {
             const client = new net.Socket();
             client.connect(this.connection_port, this.connection_url, () => {
@@ -38,31 +23,10 @@ export class OCamlClient{
             client.on('close', () => {
                 console.log("[OCamlClient] Connection closed");
             });
-            // if(this.connected){
-            //     resolve();
-                
-            // }
-            // this.client.connect(this.connection_port, this.connection_url, () => {
-            //     this.connected = true;
-            //     resolve();
-            // });
-
-            // this.client.on('error', (err) => {
-            //     console.error("[OCamlClient] Error connecting to OCaml server: ", err);
-            //     reject(err);
-            // });
-
-            // this.client.on('close', () => {
-            //     this.connected = false;
-            //     console.log("[OCamlClient] Connection closed");
-            // });
         });
     }
 
     public async get_AST_as_JSON(code: string): Promise<string> {
-        // if(!this.connected){
-        //     this.connect();
-        // }
         const client = await this.connect();
 
         return new Promise((resolve, reject) => {
@@ -70,7 +34,7 @@ export class OCamlClient{
                 if(err) {
                     return reject(err);
                 }
-                console.log("[OCamlClient] in write callback");
+                console.log("[OCamlClient] in write callback!");
                 client.end();
             });
 
@@ -87,44 +51,6 @@ export class OCamlClient{
             });
 
         });
-
-
-        // console.log("[OCamlClient] Sending code to OCaml server");
-        // return new Promise((resolve, reject) => {
-        //     this.client.write(code, (err) => {
-        //         if(err) {
-        //             return reject(err);
-        //         }
-        //         console.log("[OCamlClient] in write callback");
-        //         // this.connected=false;
-        //         this.client.end();
-        //     });
-
-        //     this.client.on('data', (data) => {
-        //         resolve(JSON.stringify(JSON.parse(data.toString()), null, 2));
-        //     });
-
-        //     this.client.on('error', (err) => {
-        //         reject(err);
-        //     });
-
-        //     this.client.on('close', () => {
-        //         this.connected=false;
-        //     });
-        // });
-
-
-
-        // this.client.write(code);
-        // this.client.end();
-        // this.connected = false;
-        // return new Promise((resolve, reject) => {
-        //     this.client.on('data', (data) => {
-        //         resolve(JSON.stringify(JSON.parse(data.toString()), null, 2));
-        //     });
-        // });
-        
-        // return "";
     }
 
     private is_comment(line: string): boolean {

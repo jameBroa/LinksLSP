@@ -153,20 +153,13 @@ class LanguageServer {
      
   }
   private async onReferences(params: ReferenceParams): Promise<Location[]> {
-    // Handler setup
-    const document = this.documents.get(params.textDocument.uri);
+    const ast = await this.getAST(params);
 
-      if(!document) {
-        return [];
-      }
-    const text = document.getText();
-    
-    // Getting AST of the whole document
-    const fileLocation = document.uri.substring(7, document.uri.length);
-    const AST_as_json: string = await this.ocamlClient.get_AST_as_JSON(`${fileLocation}\n`);
-    
-    // ast: ASTNode => Abstract Syntax Tree for the whole document
-    const ast = AST.fromJSON(AST_as_json, text);
+    if(!ast) {
+      console.log("[LanguageServer.OnReferences] Could not get AST");
+      return [];
+    }
+
     function removeParentField(key: string, value: any){
       if(key==="parent"){
         return undefined;
@@ -176,13 +169,25 @@ class LanguageServer {
     }
     
     // Retrieve ASTNode at the position of the cursor
-    const referenceNode = AST.findNodeAtPosition(ast, params.position);
+
+    // For some reason character position on the first line is 1 (or line 0?) behind?
+    let position;
+    if(params.position.line === 0) {
+      position = Position.create(
+        params.position.line, params.position.character+1
+      );
+    } else {
+      position = params.position;
+    }
+
+
+    const referenceNode = AST.findNodeAtPosition(ast, position);
     if(!referenceNode){
       console.log("[LanguageServer.OnReferences] Could not find node at cursor position");
       return [];
     }
 
-    console.log(`[LanguageServer.OnReferences] referenceNode: ${JSON.stringify(referenceNode, removeParentField, 2)}`);
+    // console.log(`[LanguageServer.OnReferences] referenceNode: ${JSON.stringify(referenceNode, removeParentField, 2)}`);
     let valid_references: Location[] = [];
     if(!referenceNode.parent) {
       return [];
@@ -192,12 +197,12 @@ class LanguageServer {
     if(referenceNode.value === "NormalFunlit") {
       // Do Function reference
       console.log("[LanguageServer] Trying to find function references");
-      console.log(`[LanguageServer] Actual referenceNode: ${JSON.stringify(referenceNode.parent, removeParentField, 2)}`);
+      // console.log(`[LanguageServer] Actual referenceNode: ${JSON.stringify(referenceNode.parent, removeParentField, 2)}`);
       // Node at cursor for functions isn't actually the function node. This is a quirk with the AST as currently, nodes are
       // found by their range, and the function node's range is the same as FunctionLits range.
       const functionNode = referenceNode.parent;
       const references = AST.getFunctionReferences(functionNode, ast);
-      console.log(`[LanguageServer] references: ${JSON.stringify(references, removeParentField, 2)}, all Function references tree`);
+      // console.log(`[LanguageServer] references: ${JSON.stringify(references, removeParentField, 2)}, all Function references tree`);
 
       for(let ref of references) {
         let ref_pos = ref.range;
@@ -229,11 +234,12 @@ class LanguageServer {
       return ret;
     } else {
       // Do Variable reference
+      console.log(`[LanguageServer.OnReferences] Trying to look for variable references...`);
       const references = AST.getVariableReferences(referenceNode, ast);
 
       const reference_node_range = referenceNode.parent.range;
-      console.log(`[LanguageServer] references: ${JSON.stringify(references, removeParentField, 2)}, all Variable reference tree`);
-      console.log(`[LanguageServer] reference_node_range: ${JSON.stringify(reference_node_range, null, 2)}`);
+      // console.log(`[LanguageServer] references: ${JSON.stringify(references, removeParentField, 2)}, all Variable reference tree`);
+      // console.log(`[LanguageServer] reference_node_range: ${JSON.stringify(reference_node_range, null, 2)}`);
 
       for(let ref of references) {
         let ref_pos = ref.range;
@@ -256,22 +262,30 @@ class LanguageServer {
 
       
       valid_references.map(ref => {
-      let new_start = ref.range.start.line;
+        let new_start = ref.range.start.line;
         let new_end = ref.range.end.line;
+        let new_start_char = ref.range.start.character;
+        let new_end_char = ref.range.end.character;
+
+        if(new_start === 1) {
+          new_start_char -= 2;
+          new_end_char -= 2;
+        } else {
+          new_start_char -= 1;
+          new_end_char -=1;
+        }
         ret.push(
           Location.create(
             params.textDocument.uri,
             (Range.create(
-              Position.create(new_start-1, ref.range.start.character-1),
-              Position.create(new_end-1, ref.range.end.character-1)
+              Position.create(new_start-1, new_start_char),
+              Position.create(new_end-1, new_end_char)
             ))
           )
         );
       });
       return ret;
     }
-
-    return [];
   }
 
   private isBefore(range1: Range, range2: Range): boolean {
@@ -294,30 +308,160 @@ class LanguageServer {
     return false;
   }
 
-
-  private onDefinition(params: TextDocumentPositionParams): Location | null {
-    const document = this.documents.get(params.textDocument.uri);
+  private async getAST(uri: TextDocumentPositionParams): Promise<AST.ASTNode | null> {
+    const document = this.documents.get(uri.textDocument.uri);
     if (!document) {
       return null;
     }
-    const text = document.getText();
-    const lines = text.split(/\r?\n/g);
-    const word = InfoRetriever.getWordAtPosition(lines, params.position);
-    // GlobalLogger.log(`word: ${word}`);
-    for(let i = 0; i < lines.length; i++){
-      const line = lines[i];
-      const match = new RegExp(`fun\\s+${word}\\s*\\(`).exec(line);
-      if(match){
-        return Location.create(
-          params.textDocument.uri, 
+    const fileLocation = document.uri.substring(7, document.uri.length);
+    const AST_as_json: string = await this.ocamlClient.get_AST_as_JSON(`${fileLocation}\n`);
+    const ast = AST.fromJSON(AST_as_json, document.getText());
+    return ast;
+  }
+
+  private async onDefinition(params: TextDocumentPositionParams): Promise<Location | null> {
+    // Can do for variables and functions
+    const ast = await this.getAST(params);
+    if (!ast) {
+      return null;
+    }
+
+    const referenceNode = AST.findNodeAtPosition(ast, params.position);
+
+    if (!referenceNode) {
+      console.log("[LanguageServer.onDefinition] Could not find node at cursor position");
+      return null;
+    }
+
+    // console.log(`[LanguageServer.onDefinition] referenceNode: ${JSON.stringify(referenceNode, AST.removeParentField, 2)}`);
+    // console.log(`[LangaugeServer.onDefinition] whole AST: ${JSON.stringify(ast, AST.removeParentField, 2)}`);
+    if(referenceNode.parent && 
+      referenceNode.parent.value==="FnAppl" && 
+      referenceNode.parent.children &&
+      referenceNode.parent.children[0] === referenceNode
+    ){
+      // OnDefinition for function
+      console.log(`[LanguageServer.onDefinition] looking for function definition`);
+      const functionName = referenceNode.value.split(" ")[1];
+      const functionDefinition = AST.getFunctionDefinition(functionName, ast);
+
+      if(!functionDefinition) {
+        console.log(`[LangaugeServer.onDefinition] Could not find function definition for ${functionName}`);
+        return null;
+      }
+      let ret;
+      // For some reason, if the function is on the first line, the character is off by 1. Not sure why
+      // console.log(`[LanguageServer.onDefinition] functionDefinition.range.start.line: ${functionDefinition.range.start.line}`);
+      if(functionDefinition.range.start.line === 1) {
+        ret =  Location.create(
+          params.textDocument.uri,
           Range.create(
-            Position.create(i, match.index), 
-            Position.create(i, match.index + match[0].length)
+            Position.create(functionDefinition.range.start.line-1, functionDefinition.range.start.character+2),
+            Position.create(functionDefinition.range.start.line-1, functionDefinition.range.start.character+2)
+          )
+        );
+      } else {
+        ret =  Location.create(
+          params.textDocument.uri,
+          Range.create(
+            Position.create(functionDefinition.range.start.line-1, functionDefinition.range.start.character+3),
+            Position.create(functionDefinition.range.start.line-1, functionDefinition.range.start.character+3)
+          )
+        );
+      } 
+      // console.log(`[LanguageServer.onDefinition] functionDefinition: ${JSON.stringify(ret, null, 2)}`);
+      return ret;
+    } else {
+      // OnDefinition for variable
+      console.log(`[LanguageServer.OnDefinition] Looking for variables...`);
+      if(AST.isParameterVariable(referenceNode, ast)) {
+        console.log(`[LanguageServer.OnDefinition] referenceNode is a parameter so returning same position...`);
+        let ret;
+        ret = Location.create(
+          params.textDocument.uri,
+          Range.create(
+            Position.create(referenceNode.range.start.line-1, referenceNode.range.start.character-1),
+            Position.create(referenceNode.range.end.line-1, referenceNode.range.end.character-1)
+          )
+        );
+        // console.log(`[LanguageServer.OnDefinition] ret: ${JSON.stringify(ret, null, 2)}`);
+        return ret;
+      }
+      // console.log(`[LanguageServer.OnDefinition] referenceNode: ${JSON.stringify(referenceNode, AST.removeParentField, 2)}`);
+
+      let functionNode = AST.findFunctionNodeOfParam(referenceNode, ast);
+
+      if(!functionNode) {
+        console.log(`[LanguageServer.OnDefinition] Could not find function node for variable`);
+        // console.log(`[LanguageServer.OnDefinition] referenceNode: ${JSON.stringify(referenceNode, AST.removeParentField, 2)}`);
+        return null;
+      } else if (!functionNode.children) {
+        console.log(`[LanguageServer.OnDefiniton] Function node has no children`);
+        return null;
+      }
+      // console.log(`[LanguageServer.OnDefinition] functionNode: ${JSON.stringify(functionNode, AST.removeParentField, 2)}`);
+
+      // Sets the node to the the NormalFunLit node (this is where the parameters are defined semantically)
+      functionNode = functionNode.children[1];
+      if(!functionNode || !functionNode.children) {
+        return null;
+      }
+
+      let varNode: AST.ASTNode | null = null;
+
+      for(const child of functionNode.children){
+        if(child.type === "Leaf" && 
+          child.value === referenceNode.value
+        ) {
+          varNode = child;
+        }
+      }
+
+      if(!varNode) {
+        console.log(`[LanguageServer.OnDefinition] Could not find paramNode, must be scopeDefined`);
+        // If can't find variable as parameter, it MUST be a scope defined variable.
+        varNode = AST.findFirstReference(referenceNode, functionNode);
+      }
+
+      // console.log(`[LanguageServer.OnDefinition] varNode: ${JSON.stringify(varNode, AST.removeParentField, 2)}`);
+
+      if(varNode.range.start.line === 1) {
+        return Location.create(
+          params.textDocument.uri,
+          Range.create(
+            Position.create(varNode.range.start.line-1, varNode.range.start.character-2),
+            Position.create(varNode.range.start.line-1, varNode.range.end.character-2)
+          )
+        );
+      } else {
+        return Location.create(
+          params.textDocument.uri,
+          Range.create(
+            Position.create(varNode.range.start.line-1, varNode.range.start.character-1),
+            Position.create(varNode.range.start.line-1, varNode.range.end.character-1)
           )
         );
       }
     }
-    return null;
+    // Old code which will be implemented via ASTs 
+
+    // const lines = text.split(/\r?\n/g);
+    // const word = InfoRetriever.getWordAtPosition(lines, params.position);
+    // // GlobalLogger.log(`word: ${word}`);
+    // for(let i = 0; i < lines.length; i++){
+    //   const line = lines[i];
+    //   const match = new RegExp(`fun\\s+${word}\\s*\\(`).exec(line);
+    //   if(match){
+    //     return Location.create(
+    //       params.textDocument.uri, 
+    //       Range.create(
+    //         Position.create(i, match.index), 
+    //         Position.create(i, match.index + match[0].length)
+    //       )
+    //     );
+    //   }
+    // }
+    // return null;
   }
   private async onHover(params: TextDocumentPositionParams): Promise<Hover | null> {
     const document = this.documents.get(params.textDocument.uri);
@@ -325,11 +469,6 @@ class LanguageServer {
       return null;
     }
     
-
-
-
-
-
     return null;
   
     // Previous implementation

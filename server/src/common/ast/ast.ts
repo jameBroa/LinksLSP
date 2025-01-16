@@ -10,6 +10,13 @@ export namespace AST {
         children?: ASTNode[];
         parent: ASTNode | null;
     }
+    export function removeParentField(key: string, value: any){
+        if(key==="parent"){
+          return undefined;
+        } else{
+          return value;
+        }
+      }
 
     export function fromJSON(json_str: string, original_code: string): ASTNode {
         const parsed = JSON.parse(json_str);
@@ -67,13 +74,13 @@ export namespace AST {
                     // if(child_range.start.line === child_range.end.line) {
                     let start = child_range.start.character;
                     let end = child_range.end.character;
-                    console.log("start", start);
-                    console.log("end", end);
-                    console.log(position.line === child_range.start.line, "line check");
+                    // console.log("start", start);
+                    // console.log("end", end);
+                    // console.log(position.line === child_range.start.line, "line check");
                     if((position.line+1) === child_range.start.line) {
                         if(position.character >= start) {
                             if(position.line+1 < child_range.end.line ) {
-                                console.log("returning");
+                                // console.log("returning");
                                 foundNode = child;
                             } else if (position.line+1 === child_range.end.line) {
                                 if(position.character <= end) {
@@ -136,6 +143,116 @@ export namespace AST {
         return references;
     }
     // If we need to do more Traversal stuff, will refactor above function to be more general
+    export function getFunctionDefinition(functionName: string, ast: ASTNode): ASTNode | null {
+        let definition: ASTNode | null = null;
+
+        function traverse(currentNode: ASTNode) {
+          if (currentNode.type === "Leaf" && 
+              currentNode.value === `Binder: ${functionName}`
+            ) {
+            definition = currentNode;
+          }
+          // Traversal method
+          if (currentNode.children) {
+            for (const child of currentNode.children) {
+              traverse(child);
+            }
+          }
+        }
+        traverse(ast);
+        return definition;
+    }
+
+    // Given a Node which is a variable, find the function node that it is a parameter of
+    // referenceNode: Node that is a variable
+    // ast: AST of the file
+    export function findFunctionNodeOfParam(referenceNode: ASTNode, ast: ASTNode): ASTNode | null {
+        let functionNode: ASTNode | null = null;
+
+
+        function traverse(currentNode: ASTNode) {
+            // console.log("currentNode", JSON.stringify(currentNode, removeParentField, 2));
+            // console.log(`refNode.start.line${referenceNode.range.start.line}`);
+            // console.log(`currentNode.start.line${currentNode.range.start.line}`);
+            if(currentNode.type === "Node" &&
+               currentNode.value === "Fun" && 
+               referenceNode.range.start.line-1 >= currentNode.range.start.line 
+            ) {
+                functionNode = currentNode;
+            }
+
+            if(currentNode.children) {
+                for(const child of currentNode.children) {
+                    traverse(child);
+                }
+            }
+        }
+
+        traverse(ast);
+        return functionNode;
+    }
+
+
+    // Will be useful to go N levels down the AST assuming we traverse down the
+    // first child each time.
+    export function setAsNChild(node: ASTNode, n: number): ASTNode | null {
+        let ret = node;
+        for (let i = 0; i < n; i++) {
+            if(ret.children) {
+                ret = ret.children[0];
+            } else {
+                return null;
+            }
+        }
+        return ret;
+    }
+
+    // Returns the first reference of a node in an AST.
+    // This is useful in finding the first reference/declaration of a variable.
+    // This will help the OnDefinition Handler
+    export function findFirstReference(node: ASTNode, ast: ASTNode): ASTNode {
+        let references: ASTNode[] = [];
+
+        function traverse(currentNode: ASTNode) {
+
+            if(currentNode.type === "Leaf" &&
+                currentNode.value === node.value
+            ) {
+                references.push(currentNode);
+            }
+
+
+            if(currentNode.children){
+                for(const child of currentNode.children) {
+
+                    traverse(child);
+                }
+            }
+        }
+        traverse(ast);
+        return references[0];
+    }
+
+    export function isParameterVariable(node: ASTNode, ast: ASTNode) {
+        let isParam = false;
+
+        function traverse(currentNode: ASTNode) {
+            if(currentNode.type === "Node" &&
+                currentNode.value === "Fun" &&
+                currentNode.range.start.line === node.range.start.line
+            ) {
+                isParam = true;
+            }
+
+            if(currentNode.children) {
+                for(const child of currentNode.children) {
+                    traverse(child);
+                }
+            }
+        }
+        traverse(ast);
+        return isParam;
+    }
 
 }
 

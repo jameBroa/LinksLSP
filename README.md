@@ -10,6 +10,7 @@ This repo contains an implementation of a VSCODE Extension for the programming l
 - 'Links' icon
 - Execute current code 'button'
 - OnReferences for Function implementations and parameters for Variables
+- OnDefinition for functions, variables (scope defined and parameter variables)
 
 ## Future plans
 More features which typically exist in an LSP will be implemented. This includes capabilities like 'Syntax highlighting' as well as autocomplete, goToFunction definition etc. 
