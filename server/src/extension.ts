@@ -29,22 +29,26 @@ import {
   ReferenceParams,
   Hover,
   MarkupContent,
-  Connection
+  Connection,
+  TextDocumentChangeEvent,
+  DidChangeTextDocumentParams,
+  TextDocumentContentChangeEvent
 } from 'vscode-languageserver';
 
 import { AST } from './common/ast/ast';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { BuildVarSemantics } from './common/semantics/variableScope';
-import LinksLSPLogger from './common/utils/logger';
 import { TableCompletionProvider } from './completion/TableCompletionProvider';
-import InfoRetriever from './common/utils/InfoRetriever';
-import { Position as VscodePosition } from "vscode-languageserver-types";
-import * as net from 'net';
 import { OCamlClient } from './common/ocaml/ocamlclient';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { DocumentManipulator } from './common/document/document';
+import * as lodash from 'lodash';
+import { Mutex } from 'async-mutex';
 
 // Problem: How do we implement the GlobalLogger if we can't export it since we need to pass the connection variable
 // Solution: n/a
 // Solved: No
+// Note: Do we need to solve it? console.log works as expected now so there shouldn't be a need for GlobalLogger...
 
 // export const GlobalLogger = new LinksLSPLogger();
 interface ExampleSettings {
@@ -63,6 +67,7 @@ class LanguageServer {
   private hasWorkspaceFolderCapability: boolean;
   private hasDiagnosticRelatedInformationCapability: boolean;
   private documents: TextDocuments<TextDocument>;
+  private documentsMap: Map<string, string>;
   private defaultSettings: ExampleSettings = { maxNumberOfProblems: 1000 };
   private globalSettings: ExampleSettings;
   private documentSettings: Map<string, Thenable<ExampleSettings>>;
@@ -71,6 +76,7 @@ class LanguageServer {
   private db_schemas: Map<string, Array<{columnName:string, dataType: string}>> | undefined;
 
   private ocamlClient: OCamlClient;
+  private mutex: Mutex;
 
 
   constructor() {
@@ -81,7 +87,9 @@ class LanguageServer {
     this.hasDiagnosticRelatedInformationCapability = false;
     this.globalSettings = this.defaultSettings;
     this.documentSettings = new Map();
+    this.documentsMap = new Map();
     this.ocamlClient = new OCamlClient();
+    this.mutex = new Mutex();
     this.initializeHandlers();
   }
 
@@ -93,14 +101,25 @@ class LanguageServer {
     this.connection.onReferences(this.onReferences.bind(this));
     this.connection.onDefinition(this.onDefinition.bind(this));
     this.connection.onHover(this.onHover.bind(this));
+
+    this.connection.onDidChangeTextDocument(this.onDidChangeTextDocument.bind(this));
     this.connection.onDidChangeConfiguration(this.onDidChangeConfiguration.bind(this));
     this.connection.onDidChangeWatchedFiles(this.onDidChangeWatchedFiles.bind(this));
     this.connection.onNotification('custom/updateDatabaseConfig', this.onNotification.bind(this));
     this.connection.onCompletion(this.onCompletion.bind(this));
-    this.connection.onRequest("textDocument/semanticTokens/full", this.onRequestFull.bind(this));
-    this.connection.onRequest("textDocument/semanticTokens/range", this.onRequestRange.bind(this));
-    this.connection.onCompletionResolve(this.onCompletionResolve.bind(this));
 
+    this.connection.onRequest("textDocument/semanticTokens/full", 
+      lodash.debounce(
+        this.onRequestFull, 
+        300,
+        {trailing: true}
+      ).bind(this));
+    // this.connection.onRequest("textDocument/semanticTokens/full", this.onRequestFull.bind(this));
+
+    this.connection.onRequest("textDocument/semanticTokens/range", this.onRequestRange.bind(this));
+    // this.connection.onRequest("textDocument/semanticTokens/full/delta", this.onRequestFullDelta.bind(this));
+    this.connection.onCompletionResolve(this.onCompletionResolve.bind(this));
+    // workspace.onDidChangeTextDocument(this.onDidChangeTextDocument.bind(this));
     this.documents.onDidClose(this.onDidClose.bind(this));
     this.documents.onDidChangeContent(this.onDidChangeContent.bind(this));
   }
@@ -126,11 +145,43 @@ class LanguageServer {
           textDocumentSync: TextDocumentSyncKind.Incremental,
           semanticTokensProvider: {
             legend: {
-              tokenTypes: ["signature", "function", "variable", "comment"],
+              // tokenTypes: ["signature", "function", "variable", "comment"],
+              tokenTypes: [
+                'namespace',
+                'type',
+                'class',
+                'enum',
+                'interface',
+                'struct',
+                'typeParameter',
+                'parameter',
+                'variable',
+                'variableUnused',
+                'property',
+                'enumMember',
+                'event',
+                'function',
+                'method',
+                'macro',
+                'keyword',
+                'modifier',
+                'comment',
+                'string',
+                'number',
+                'regexp',
+                'operator',
+                'xml',
+                'xmlTag',
+                "xmlAttribute",
+                "projections",
+                "unusedFunction",
+                "usedFunction"
+              ],
               tokenModifiers: []
             },
-            full:true,
-            range:true
+            
+            full: true,
+            range:true,
           },
           completionProvider: {
             resolveProvider: true,
@@ -153,7 +204,19 @@ class LanguageServer {
      
   }
   private async onReferences(params: ReferenceParams): Promise<Location[]> {
-    const ast = await this.getAST(params);
+
+    let ast;
+    if(this.documentsMap.has(params.textDocument.uri)) {
+      // map is only setup when the doc changes
+      console.log("Getting AST from map");
+      console.log(`======= Document state:\n"${this.documentsMap.get(params.textDocument.uri)}"\n\n\n =====`);
+      ast = await this.getASTFromText(this.documentsMap.get(params.textDocument.uri)!);
+    } else {
+      // this is for when the file is first loaded
+      console.log("Getting AST from file itself");
+      ast = await this.getAST(params);
+    }
+    // const ast = await this.getAST(params);
 
     if(!ast) {
       console.log("[LanguageServer.OnReferences] Could not get AST");
@@ -309,19 +372,99 @@ class LanguageServer {
   }
 
   private async getAST(uri: TextDocumentPositionParams): Promise<AST.ASTNode | null> {
-    const document = this.documents.get(uri.textDocument.uri);
+    let document = this.documents.get(uri.textDocument.uri);
     if (!document) {
-      return null;
+        return null;
     }
-    const fileLocation = document.uri.substring(7, document.uri.length);
-    const AST_as_json: string = await this.ocamlClient.get_AST_as_JSON(`${fileLocation}\n`);
-    const ast = AST.fromJSON(AST_as_json, document.getText());
-    return ast;
+
+    // Get the in-memory content of the document
+    const documentContent = document.getText();
+
+    // Define a path for the temporary file
+    // const tempFilePath = path.join(__dirname, 'temporary.links');
+
+    // await fs.writeFile(tempFilePath, documentContent, 'utf8');
+
+    try {
+        // Write the in-memory content to the temporary file
+        // Send the temporary file to the parser
+        const AST_as_json: string = await this.ocamlClient.get_AST_as_JSON(`${uri.textDocument.uri.replace("file://", "")}\n`);
+        // Parse the AST from the JSON
+        const ast = await AST.fromJSON(AST_as_json, documentContent);
+        return ast;
+    } catch (error) {
+        console.error('Error while generating AST:', error);
+        return null;
+    } 
+    // finally {
+    //     // Clean up the temporary file
+    //     try {
+    //         await fs.unlink(tempFilePath);
+    //     } catch (cleanupError) {
+    //         console.warn('Failed to delete temporary file:', cleanupError);
+    //     }
+    // }
+    // const document = this.documents.get(uri.textDocument.uri);
+    // if (!document) {
+    //   return null;
+    // }
+    // const fileLocation = document.uri.substring(7, document.uri.length);
+    // const AST_as_json: string = await this.ocamlClient.get_AST_as_JSON(`${fileLocation}\n`);
+    // const ast = AST.fromJSON(AST_as_json, document.getText());
+    // return ast;
+  }
+
+  private async getASTFromText(text: string): Promise<AST.ASTNode | null> {
+
+    let documentContent = text;
+
+    const tempFilePath = path.join(__dirname, 'temporary.links');
+
+    try {
+        // Write the in-memory content to the temporary file
+        await fs.writeFile(tempFilePath, documentContent, 'utf8');
+        const tempFileContent = await fs.readFile(tempFilePath, 'utf8');
+
+        // Send the temporary file to the parser
+        const AST_as_json: string = await this.ocamlClient.get_AST_as_JSON(`${tempFilePath}\n`);
+
+        // Parse the AST from the JSON
+        const ast = AST.fromJSON(AST_as_json, documentContent);
+        return ast;
+    } catch (error) {
+        console.error('Error while generating AST:', error);
+        return null;
+    } finally {
+        // Clean up the temporary file
+        try {
+            await fs.unlink(tempFilePath);
+        } catch (cleanupError) {
+            console.warn('Failed to delete temporary file:', cleanupError);
+        }
+    }
+
   }
 
   private async onDefinition(params: TextDocumentPositionParams): Promise<Location | null> {
     // Can do for variables and functions
-    const ast = await this.getAST(params);
+
+    let ast;
+    if(this.documentsMap.has(params.textDocument.uri)) {
+      // map is only setup when the doc changes
+      console.log("Getting AST from map");
+      console.log(`======= Document state:\n"${this.documentsMap.get(params.textDocument.uri)}"\n\n\n =====`);
+      ast = await this.getASTFromText(this.documentsMap.get(params.textDocument.uri)!);
+    } else {
+      // this is for when the file is first loaded
+      console.log("Getting AST from file itself");
+      ast = await this.getAST(params);
+    }
+
+
+
+
+
+    // const ast = await this.getAST(params);
     if (!ast) {
       return null;
     }
@@ -591,15 +734,20 @@ class LanguageServer {
     // For now, e:any
     this.documentSettings.delete(e.document.uri);
   }
-  private async onDidChangeContent(change: any) {
-    // For now, change:any
-    this.validateTextDocument(change.document);
+  private onDidChangeContent(change: {document: TextDocument}) {
+    const document = change.document;
+    const documentContent = document.getText();
+    // console.log("apples");
+    // console.log("content: ", documentContent, "doc changed");
+
+    // this.validateTextDocument(change.document);
   }
   private logToClient(message: string) {
     this.connection.sendNotification("custom/logMessage", message);
   }
-  private onDidChangeWatchedFiles(_change: any) {
+  private async onDidChangeWatchedFiles(_change: any) {
     // For now, _change:any
+    console.log("file change!");
     this.connection.console.log('We received a file change event');
   }
   private onNotification(config: any){
@@ -630,34 +778,278 @@ class LanguageServer {
       return [];
     }
   }
-  private onRequestFull(params: any) {
-    const document = this.documents.get(params.textDocument.uri);
-    if(!document) {
-      return {data: []} as unknown as SemanticTokens;
+
+  // documentsMap: Map<string, string>
+  // key is supposedly uri
+  // value is the string representation of the document
+
+  private debounce(func: (...args: any[]) => void, wait: number) {
+    let timeout: NodeJS.Timeout;
+    return (...args: any[]) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  }
+
+
+  private debouncedOnDidChangeTextDocument = this.debounce(async (params: DidChangeTextDocumentParams) => {
+    let document = params.textDocument;
+    let contentChanges: TextDocumentContentChangeEvent[] = params.contentChanges;
+  
+    let documentContent;
+    if (this.documentsMap.has(document.uri)) {
+      documentContent = this.documentsMap.get(document.uri);
+    } else {
+      documentContent = this.documents.get(document.uri)!.getText();
+    }
+  
+    // Assuming documentContent is never undefined (maybe a bad assumption)
+    let newDocumentContent = DocumentManipulator.AdjustDocument(documentContent!, contentChanges);
+  
+    this.documentsMap.set(document.uri, newDocumentContent);
+  
+    await this.onRequestFull(params);
+    this.connection.sendNotification('custom/refreshSemanticTokens', { uri: document.uri });
+  }, 300); // Adjust the debounce delay as needed
+
+  private async onDidChangeTextDocument(params: DidChangeTextDocumentParams){
+    console.log(`[onDidChangeTextDocument] called`);
+    let document = params.textDocument;
+    let contentChanges: TextDocumentContentChangeEvent[] = params.contentChanges;
+
+    let documentContent;
+    if(this.documentsMap.has(document.uri)){
+      documentContent = this.documentsMap.get(document.uri);
+    } else {
+      documentContent = this.documents.get(document.uri)!.getText();
     }
 
-    const text = document.getText();
+    // Assuming documentContent is never undefined (maybe a bad assumption)
+    let newDocumentContent = DocumentManipulator.AdjustDocument(documentContent!, contentChanges);
 
-    let match;
+    this.documentsMap.set(document.uri, newDocumentContent);
+
+    // let newAST: AST.ASTNode | null = await this.getASTFromText(newDocumentContent);
+
+    // What this means is that we should have a new AST for the document whenever the file changes
+    // and pass this any time we want semantics done. by saving it as a field of the class, persistance
+    // is achieved so the problem described in DocumentManipulator.AdjustDocument is resolved!
+
+    await this.onRequestFull(params);
+    this.connection.sendNotification('custom/refreshSemanticTokens', { uri: document.uri });
+    // this.connection.sendRequest('workspace/semanticTokens/refresh');
+
+  }
+  
+  
+
+
+  private async onRequestFull(params: any) {
+    const release = await this.mutex.acquire();
+    try {
+    console.log(`[onRequestFull] called`);
+    console.log(`[onRequestFull] document version: ${params.version}`);
+    let ast;
+    if(this.documentsMap.has(params.textDocument.uri)) {
+      // map is only setup when the doc changes
+      console.log("[onRequestFull] Getting AST from map");
+      ast = await this.getASTFromText(this.documentsMap.get(params.textDocument.uri)!);
+    } else {
+      // this is for when the file is first loaded
+      console.log("[onRequestFull] Getting AST from file itself");
+      ast = await this.getAST(params);
+    }
+
+    if(!ast){
+      return;
+    }
+
+    // console.log(`DOING SEMANTIC BUILDING!!!!!`);
+
     let builder = new SemanticTokensBuilder();
 
-    builder = BuildVarSemantics(params, text, document, builder);
+    // ##################### VARIABLES #####################
+    const all_vars: AST.ASTNode[] = AST.getAllVariables(ast);
 
-    // while((match = keywordPattern.exec(text)) !== null) {
-    //   const pos = document.positionAt(match.index);
-    //   builder.push(
-    //     pos.line,
-    //     pos.character,
-    //     match[0].length,
-    //     0,
-    //     0
-    //   );
-    // }
-    return builder.build();
+    let all_vars_no_cons = all_vars.filter((node) => {
+      return node.value.substring(0,35) !== "Constant: (CommonTypes.Constant.Int" 
+      && node.value.substring(0, 37) !== "Constant: (CommonTypes.Constant.Float" &&
+      node.value.substring(0, 38) !== "Constant: (CommonTypes.Constant.String";
+    });
+
+    let unused_variables = AST.variableParser.extractUnusedVariables(all_vars_no_cons);
+
+    let unused_variables_set = new Set(unused_variables);
+
+    let used_variables = all_vars_no_cons.filter((node) => {
+      return !unused_variables_set.has(node);
+    });
+
+    let constants = all_vars.filter((node) => {
+      return node.value.substring(0,35) === "Constant: (CommonTypes.Constant.Int" || 
+      node.value.substring(0, 37) === "Constant: (CommonTypes.Constant.Float";
+    });
+
+    let string_constants = all_vars.filter((node) => {
+      return node.value.substring(0, 38) === "Constant: (CommonTypes.Constant.String";
+    });
+
+    let projections = AST.variableParser.extractProjectionsFromAST(ast);
+    // ##################### ######### #####################
+
+
+    let all_xml = AST.getXMLNodes(ast);
+
+    let xml = all_xml.filter((node) => {
+      return node.value.substring(0,9) !== "TextNode:";
+    });
+
+    // ##################### FUNCTIONS #####################
+
+
+    // TODO: Modify all the following functions below into ONE
+
+    let functionDefinitions = AST.functionParser.extractFunctionDefinitions(ast);
+
+    // functionCalls: an array of strings which are just the function calls in a doc.
+    let functionCalls = AST.functionParser.extractFunctionCalls(ast);
+
+    // functionCallsMap is just a Map between function name and the number of times it is called
+    let functionCallsMap = AST.functionParser.createFunctionToNumCallsMap(functionCalls);
+    let functionCallers = AST.functionParser.getFunctionCallers(ast);
+
+
+    let unusedFunctions: AST.ASTNode[] = [];
+    if(functionDefinitions){
+        unusedFunctions = functionDefinitions.filter((node) => {
+          return !functionCallsMap.has(node.value.split(" ")[1]) || functionCallsMap.get(node.value.split(" ")[1]) === 0;
+    
+        });
+    }
+    
+
+    let usedFunctions: AST.ASTNode[] = [];
+
+    if(functionDefinitions){
+      usedFunctions = functionDefinitions.filter((node) => {
+        return functionCallsMap.has(node.value.split(" ")[1]);
+      });
+    }
+    
+    // ##################### ######### #####################
+
+ 
+    const document = this.documents.get(params.textDocument.uri);
+    if(!document){
+      return null;
+    } 
+
+
+    // ##################### XML #####################
+
+    let xml_semantics;
+    if(this.documentsMap.has(params.textDocument.uri)) {
+      // map is only setup when the doc changes
+      xml_semantics = AST.xmlParser.extractSemantics(xml, this.documentsMap.get(params.textDocument.uri)!);
+     
+    } else {
+      // this is for when the file is first loaded
+      xml_semantics = AST.xmlParser.extractSemantics(xml, document.getText());
+    }
+
+    // let xml_semantics = AST.xmlParser.extractSemantics(xml, document);
+
+    let xml_declaration = xml_semantics.filter((node) => {
+      return node.value !== "xmlTag" && node.value !== "xmlAttribute";
+    });
+
+    let xml_tags = xml_semantics.filter((node) => {
+      return node.value === "xmlTag";
+    });
+
+    let xml_attributes = xml_semantics.filter((node) => {
+      return node.value === "xmlAttribute";
+    });
+    // ##################### ######### #####################
+
+
+  const all_tokens = [
+      ...used_variables.map(node => ({node, type: 8})),
+      ...unused_variables.map(node => ({node, type: 9})),
+      ...string_constants.map(node => ({node, type: 19})),
+      ...constants.map(node => ({node, type: 20})),
+      ...xml_declaration.map(node => ({node, type: 23})),
+      ...xml_tags.map(node => (({node, type: 24}))),
+      ...xml_attributes.map(node => (({node, type: 25}))),
+      ...projections.map(node => (({node, type: 26}))),
+      ...unusedFunctions.map(node => (({node, type: 27}))),
+      ...usedFunctions.map(node => ({node, type: 28})),
+      ...functionCallers.map(node => ({node, type: 28})),
+
+  ].sort((a, b) => {
+      if (!a.node.range || !b.node.range) {
+        return 0;
+      }
+      if (a.node.range.start.line !== b.node.range.start.line) {
+        return a.node.range.start.line - b.node.range.start.line;
+      }
+      return a.node.range.start.character - b.node.range.start.character;
+  });
+
+  // Add to builder in sorted order
+  for (const {node, type} of all_tokens) {
+      if(node.range.start.line === 1) {
+          builder.push(
+              node.range.start.line-1,
+              node.range.start.character-2,
+              (node.range.end.character - node.range.start.character),
+              type,
+              0
+          );
+      } else {
+          builder.push(
+              node.range.start.line-1,
+              node.range.start.character-1,
+              (node.range.end.character - node.range.start.character),
+              type,
+              0
+          );
+      }
   }
-  private onRequestRange(params: any) {
+
+  let tokens = builder.build();
+  // console.log("[onRequestFull] Generated Tokens:");
+  // console.log("=================================");
+  // tokens.data.forEach((token, index) => {
+  //   if (index % 5 === 0) {
+  //     console.log(`Token ${Math.floor(index / 5) + 1}:`);
+  //   }
+  //   console.log(`  ${["deltaLine", "deltaStart", "length", "tokenType", "tokenModifiers"][index % 5]}: ${token}`);
+  // });
+  // console.log("=================================");
+
+    
+  // this.connection.sendNotification('custom/refreshSemanticTokens', { uri: document.uri });
+  return tokens;
+  } catch (e) {
+    console.error(`[onRequestFull] Error: ${e}`);
+  } finally {
+    release();
+    
+  }
+}
+
+  private async onRequestFullDelta(params: any) {
     const semanticTokens = {data: []} as unknown as SemanticTokens;
-    console.log("some semantic stuff related to /range is happening!");
+    return semanticTokens;
+  }
+
+
+
+  private async onRequestRange(params: any) {
+    const semanticTokens = {data: []} as unknown as SemanticTokens;
+    console.log(`[onRequestRange] called`);
+    // return await this.onRequestFull (params);
     return semanticTokens;
   }
   private onCompletionResolve(item: CompletionItem): CompletionItem {

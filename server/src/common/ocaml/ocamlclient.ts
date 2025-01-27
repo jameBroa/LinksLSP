@@ -26,9 +26,26 @@ export class OCamlClient{
         });
     }
 
+    private parseInnerJson(data: any): any {
+        if (typeof data === 'string') {
+          try {
+            return JSON.parse(data); // Attempt to parse the string as JSON
+          } catch {
+            return data; // If parsing fails, return the string as-is
+          }
+        } else if (Array.isArray(data)) {
+          return data.map(this.parseInnerJson); // Recursively parse each item in the array
+        } else if (typeof data === 'object' && data !== null) {
+          return Object.fromEntries(
+            Object.entries(data).map(([key, value]) => [key, this.parseInnerJson(value)])
+          );
+        }
+        return data; // Return other types (e.g., numbers) as-is
+      }
+
     public async get_AST_as_JSON(code: string): Promise<string> {
         const client = await this.connect();
-
+        let full_data = "";
         return new Promise((resolve, reject) => {
             client.write(code, (err) => {
                 if(err) {
@@ -39,7 +56,25 @@ export class OCamlClient{
             });
 
             client.on('data', (data) => {
-                resolve(JSON.stringify(JSON.parse(data.toString()), null, 2));
+                console.log("[OCamlClient] Receiving data....");
+                // console.log(data.toString(), "DATA");
+                // console.log(`[OCamlClient] Received data: "${data.toString()}" from OCaml server`);
+                // // console.log(JSON.stringify(JSON.parse(data.toString()), null, 2), "literarlly parsed to json");
+                // // resolve(data.toString());
+                // resolve(JSON.stringify(JSON.parse(data.toString()), null, 2));
+                full_data += data.toString();
+            });
+
+            client.on('end', async() => {
+                try{
+                    const parsedData = JSON.parse(full_data);
+                    // const resolution = await this.parseInnerJson(parsedData);
+                    // console.log("[OCamlClient] Received data: ", JSON.stringify(resolution, null, 2), "PLEASE PLEASE");
+                    resolve(JSON.stringify(parsedData, null, 2));
+                } catch(e){
+                    console.error(`[OCamlClient.get_AST_as_JSON] Error at 'end': ${e}`);
+                    reject(e);
+                }
             });
 
             client.on('error', (err) => {

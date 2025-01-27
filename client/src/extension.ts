@@ -20,6 +20,44 @@ import { DatabaseHandler } from './database/DatabaseHandler';
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
+	const legend = new vscode.SemanticTokensLegend([
+		'namespace',
+		'type',
+		'class',
+		'enum',
+		'interface',
+		'struct',
+		'typeParameter',
+		'parameter',
+		'variable',
+		'variableUnused',
+		'property',
+		'enumMember',
+		'event',
+		'function',
+		'method',
+		'macro',
+		'keyword',
+		'modifier',
+		'comment',
+		'string',
+		'number',
+		'regexp',
+		'operator',
+		'xml',
+		'xmlTag'
+	  ], []);
+
+	  const provider: vscode.DocumentSemanticTokensProvider = {
+		provideDocumentSemanticTokens(document: vscode.TextDocument): vscode.ProviderResult<vscode.SemanticTokens> {
+		  return client.sendRequest('textDocument/semanticTokens/full', {textDocument: {uri: document.uri.toString()}});
+		}
+	  };
+	
+	  context.subscriptions.push(
+		vscode.languages.registerDocumentSemanticTokensProvider({ language: 'links' }, provider, legend)
+	  );
+
 
 	const outputChannel = vscode.window.createOutputChannel("LinksLSP");
 	outputChannel.show();
@@ -141,7 +179,16 @@ export function activate(context: ExtensionContext) {
 		client.onNotification("custom/logMessage", (message: string) => {
 			outputChannel.appendLine(message);
 		});
+		client.onNotification("custom/refreshSemanticTokens", async (args) => {
+			const editor = vscode.window.activeTextEditor;
+			if (editor && editor.document.uri.toString() === args.uri) {
+				outputChannel.appendLine("Calling provideDocumentSemanticTokens");
+				await vscode.commands.executeCommand('vscode.provideDocumentSemanticTokens', editor.document);
+			}
+		});
 	});
+	const selector = {language: 'links', scheme: 'file'};
+	vscode.languages.registerDocumentSemanticTokensProvider(selector, provider, legend);
 	
 
 }

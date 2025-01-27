@@ -39,7 +39,7 @@ export const BuildVarSemantics = (params: SemanticTokensParams, text: string, do
                 pos.line,
                 pos.character,
                 pos.length,
-                2,
+                2, // token type for variables
                 0
             );
         }

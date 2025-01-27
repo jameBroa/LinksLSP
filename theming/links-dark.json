@@ -1,0 +1,110 @@
+{
+  "name": "Links Theme",
+  "type": "dark",
+  "base": "vs-dark",
+  "colors": {
+    "editor.background": "#1E1E1E",
+    "editor.foreground": "#D4D4D4"
+  },
+  "semanticHighlighting":true,
+  "tokenColors": [
+    {
+      "scope": "variable.used.links",
+      "settings": {
+        "foreground": "#9cdcfe"
+      }
+    },
+    {
+      "scope": "variable.unused.links",
+      "settings": {
+        "foreground": "#739DB3"
+      }
+    },
+    {
+      "scope": "usedFunction.links",
+      "settings": {
+        "foreground": "#DCDCAA"
+      }
+    },
+    {
+      "scope": "keyword.control.links",
+      "settings": {
+        "foreground": "#569CD6"
+      }
+    },
+    {
+      "scope":"support.type.links",
+      "settings": {
+        "foreground": "#4EC9B0"
+      }
+    },
+    {
+      "scope": "comment.line.pound.links",
+      "settings": {
+        "foreground": "#6A9955"
+      }
+    },
+    {
+      "scope": "statement.end.links",
+      "settings": {
+        "foreground": "#D4D4D4"
+      }
+    },
+    {
+      "scope": "string.quoted.double.links",
+      "settings": {
+        "foreground": "#CE9178"
+      }
+    },
+
+    {
+      "scope":"number.links",
+      "settings": {
+        "foreground": "#B5CEA8"
+      }
+    },
+    {
+      "scope":"xmlAttribute.links",
+      "settings":{
+        "foreground":"#9CDCFE"
+      }
+    },
+    {
+      "scope":"xml.links",
+      "settings": {
+        "foreground": "#BA6D6C"
+      }
+    },
+    {
+      "scope":"xmlTag.links",
+      "settings": {
+        "foreground": "#808080"
+      }
+    },
+    {
+      "scope": "keyword.xml.defaults.links",
+      "settings": {
+        "foreground": "#569CD6"
+      }
+    },
+    {
+      "scope":"string.links",
+      "settings": {
+        "foreground": "#CE9178"
+      }
+    },
+    {
+      "scope":"projections.links",
+      "settings": {
+        "foreground": "#61AFEF"
+      }
+    },
+    {
+      "scope":"unusedFunction.links",
+      "settings": {
+        "foreground": "#9a9e82"
+      }
+    }
+    
+  ]
+}

@@ -1,79 +1,75 @@
 {
-    "name": "Links",
-    "scopeName": "source.links",
-    "patterns": [
-        {         
-            "match": "\\b(fun|var|if|else|for|while|switch|case|default|module|import|typename|sig)\\b",         
-            "name": "keyword.control.links"         
-        },         
-        {             
-            "match":"\\b(Int|String|Bool|Char|Float|Xml|Database)\\b",             
-            "name":"support.type.links"         
-        },         
-        {             
-            "match":"#.*",             
-            "name":"comment.line.pound.links"       
-        },
-        {
-          "match":";",
-          "name":"statement.end.links"
-        },         
-        {             
-            "match": "\"([^\"\\\\]|\\\\.)\"",             
-            "name": "string.quoted.double.links"
-        },         
-        {
-            "include":"#div-block"
-        },
-        {
-            "include":"#h-tags"
-        },
-        {
-            "match":"\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
-            "name": "entity.name.function.links"
-        },
-        {
-          "include":"#html-block"
-        },
-        {
-          "match":"(?<![a-zA-Z0-9])\\+|\\-|\\*|\\/|\\=|\\<|\\>(?![a-zA-Z0-9])",
-          "name":"keyword.operator.links"
-        }
-    ],
-    "repository": {
+  "name": "Links",
+  "scopeName": "source.links",
+  "patterns": [
+      {
+          "match": "\\b(fun|var|if|else|for|while|switch|case|default|module|import|typename|sig|page|database|table|from|insert|update|delete|query|where|set|with)\\b",
+          "name": "keyword.control.links"
+      },
+      {
+          "match": "\\b(Int|String|Bool|Char|Float|Xml|Database|Page)\\b",
+          "name": "support.type.links"
+      },
+      {
+        "match": "^\\s*#.*",
+        "name": "comment.line.pound.links"
+      },
+      {
+        "match": "(?<!<)#.*",
+        "name": "comment.line.pound.links"
+      },
+      {
+        "match": "(?<=<#>.*)#.*",
+        "name": "comment.line.pound.links"
+      },
+      
+      {
+          "match": ";",
+          "name": "statement.end.links"
+      },
+      {
+          "match": "\"([^\"\\\\]|\\\\.)*\"",
+          "name": "string.quoted.double.links"
+      },
+
+      {
+          "match": "(?<![a-zA-Z0-9])\\+|\\-|\\*|\\/|\\=|\\<|\\>(?![a-zA-Z0-9])",
+          "name": "keyword.operator.links"
+      }
+  ],
+  "repository": {
       "div-block": {
-        "begin": "<div\\b[^>]*>",
-        "beginCaptures": {
-            "0": { "name": "entity.name.tag.div.html" }
-        },
-        "end": "</div>",
-        "endCaptures": {
-            "0": { "name": "entity.name.tag.div.html" }
-        }
+          "begin": "<div\\b[^>]*>",
+          "beginCaptures": {
+              "0": { "name": "entity.name.tag.div.html" }
+          },
+          "end": "</div>",
+          "endCaptures": {
+              "0": { "name": "entity.name.tag.div.html" }
+          }
       },
       "h-tags": {
-        "begin": "<h1\\b[^>]*>",
-        "beginCaptures": {
-            "0": { "name": "entity.name.tag.h1.html" }
-        },
-        "end": "</h1>",
-        "endCaptures": {
-            "0": { "name": "entity.name.tag.h1.html" }
-        }
+          "begin": "<h1\\b[^>]*>",
+          "beginCaptures": {
+              "0": { "name": "entity.name.tag.h1.html" }
+          },
+          "end": "</h1>",
+          "endCaptures": {
+              "0": { "name": "entity.name.tag.h1.html" }
+          }
       },
       "page-block": {
-        "begin": "\\b(page)\\b",
-        "beginCaptures": {
-          "1": { "name": "keyword.control.page.links" }
-        },
-        "end": "(?<=})",
-        "patterns": [
-          {
-            "include":"text.html.basic"
-          }
-        ],
-        "name":"links.html"
-
+          "begin": "\\b(page)\\b",
+          "beginCaptures": {
+              "1": { "name": "keyword.control.page.links" }
+          },
+          "end": "(?<=})",
+          "patterns": [
+              {
+                  "include": "text.html.basic"
+              }
+          ],
+          "name": "links.html"
       }
-    }
   }
+}

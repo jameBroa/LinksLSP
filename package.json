@@ -75,7 +75,115 @@
           "group":"navigation"
         }
       ]
-    }
+    },
+    "themes": [
+      {
+        "label": "Links Dark",
+        "uiTheme": "vs-dark",
+        "path": "./theming/links-dark.json"
+      }
+    ],
+
+    "semanticTokenTypes": [
+      { 
+        "id": "variable",
+        "description": "Links Variables"
+      },
+      {
+        "id":"variableUnused",
+        "description": "Links Variables (Unused)"
+      },
+      {
+        "id":"number",
+        "description": "Links numbers (Constants)"
+      },
+      {
+        "id":"xml",
+        "description": "Links XML"
+      },
+      {
+        "id":"xmlTag",
+        "description": "Links XML Tag"
+      },
+      {
+        "id":"xmlAttribute",
+        "description": "Links XML Attribute"
+      },
+      {
+        "id":"string",
+        "description": "Links Strings"
+      },
+      {
+        "id":"projections",
+        "description": "Links Projections"
+      },
+      {
+        "id":"usedFunction",
+        "description":"Links functions"
+      },
+      {
+        "id":"unusedFunction",
+        "description": "Links Unused Function"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "links",
+        "scopes": {
+          "variable": [
+            "variable.used.links"
+          ],
+          "variableUnused": [
+            "variable.unused.links"
+          ],
+          "number": [
+            "number.links"
+          ],
+          "xml":[
+            "xml.links"
+          ],
+          "xmlTag":[
+            "xmlTag.links"
+          ],
+          "xmlAttribute":[
+            "xmlAttribute.links"
+          ],
+          "string":[
+            "string.links"
+          ],
+          "projections":[
+            "projections.links"
+          ],
+          "usedFunction":[
+            "usedFunction.links"
+          ],
+          "unusedFunction":[
+            "unusedFunction.links"
+          ]
+          
+        }
+      }
+    ],
+    "colors": [
+      {
+        "id":"variable.used.links",
+        "description": "Color for Links variables",
+        "defaults": {
+          "dark": "#9cdcfe",
+          "light":"#0000ff",
+          "highContrast":"#9cdcfe"
+        }
+      },
+      {
+        "id":"variable.unused.links",
+        "description":"Color for Links variable if unused",
+        "defaults":{
+          "dark":"#739DB3",
+          "light":"#739DB3",
+          "highContrast":"#739DB3"
+        }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
