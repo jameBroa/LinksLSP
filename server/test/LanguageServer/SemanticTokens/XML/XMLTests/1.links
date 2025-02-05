@@ -1,0 +1,11 @@
+
+fun example(){
+    page
+        <html>
+            <body>
+                <div>
+                </div>
+            </body>
+        </html>
+} 
+()

@@ -1,0 +1,81 @@
+fun fun1(x) {
+    x
+}
+
+fun fun2() {
+    var x = fun1(3);
+    ()
+}
+
+fun fun3() {
+    var x = fun1(3);
+    ()
+}
+
+fun fun4() {
+    fun2();
+    ()
+}
+
+
+fun fun5() {
+    fun3();
+    ()
+}
+
+fun fun6() {
+    fun4();
+    ()
+}
+
+fun fun7() {
+    fun5();
+    ()
+}
+
+fun fun8() {
+    fun6();
+    ()
+}
+
+fun fun9() {
+    fun7();
+    ()
+}
+
+fun fun10() {
+    fun8();
+    ()
+}
+
+fun fun11() {
+    fun9();
+    ()
+}
+
+fun fun12() {
+    fun10();
+    ()
+}
+
+fun fun13() {
+    fun11();
+    ()
+}
+
+fun fun14() {
+    fun12();
+    ()
+}
+
+fun fun15() {
+    fun13();
+    ()
+}
+
+fun fun16() {
+    fun14();
+    var x = fun1(3);
+    ()
+}
+()

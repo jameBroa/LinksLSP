@@ -1,0 +1,24 @@
+sig foo: (Int, Int, Int, Int) -> Int
+fun foo(a,b,c,d) {
+    var x = a*a; 
+    var y = b^c; # test
+    # test
+    var z = b*(a+y)/c; 
+    z+1+d
+}
+
+sig foo2: (Int) -> Int
+fun foo2(apple) {
+    var x = apple*apple; 
+    var y = apple^apple; 
+    apple*(apple+y)/apple
+}
+
+sig foo3: (Int, Int, Int) -> Int
+fun foo3(x,y,z) {
+    var a = x*x; 
+    var b = y^z; 
+    x*(a+b)/z
+}
+ 
+foo(3,4,3,3)

@@ -1,9 +1,11 @@
-import { Range, Position } from "vscode-languageserver";
+import { Range, Position, Diagnostic } from "vscode-languageserver";
 import { OCamlClient } from "../ocaml/ocamlclient";
 import {TextDocument} from "vscode-languageserver-textdocument";
 import { start } from "repl";
 import { AssertionError } from "assert";
 import { create } from "domain";
+import { get, remove } from "lodash";
+import { LinksParserConstants } from "../constants";
 export namespace AST {
 
     export interface ASTNode {
@@ -20,6 +22,14 @@ export namespace AST {
           return value;
         }
       }
+    
+    export function removeParentAndChildren(key: string, value:any){
+        if(key === "parent" || key === "children"){
+            return undefined;
+        } else {
+            return value;
+        }
+    }
 
     export function fromJSON(json_str: string, original_code: string): ASTNode {
         const parsed = JSON.parse(json_str);
@@ -33,7 +43,7 @@ export namespace AST {
         
     }
 
-    function parseAST(data: any, original_code: string, parent: ASTNode | null = null): ASTNode {
+    export function parseAST(data: any, original_code: string, parent: ASTNode | null = null): ASTNode {
         const [type, value, position, children] = data;
         const curr_range = JSON.parse(position);
 
@@ -61,50 +71,322 @@ export namespace AST {
             }
         }
     }
-    
-    export function findNodeAtPosition(ast: ASTNode, position: Position): ASTNode | null {
-        function isPositionInRange(position: Position, range: {start: Position, end: Position}): boolean {
-            if (position.line < range.start.line || (position.line === range.start.line && position.character < range.start.character)) {
-                return false;
+
+    // One mega function for processing the AST
+    // Will be responsible for building Semantic Relations
+    // Ensurs only one pass as well
+    export function ProcessAST(ast: ASTNode){
+        type DiagnosticIncorrParam = {
+            node: ASTNode,
+            actualNumCount: number,
+            expectedNumCount: number,
+        };
+        let undefinedVariables: ASTNode[] = [];
+        let duplicateDeclarations: ASTNode[] = [];
+        let uninitializedVariables: ASTNode[] = [];
+        let undefinedFunctions: ASTNode[] = [];
+        let incorrectParamNumber: Map<Range, DiagnosticIncorrParam> = new Map();
+
+        function processFunction(
+              local_ast: AST.ASTNode, 
+              parentVariableDefinitions: Map<string, ASTNode[]>) 
+              {
+              
+              const functionName = functionParser.getName(local_ast);
+        
+              let localVariableDefinitions: Map<string, ASTNode[]> = variableParser.getVariableDefinitionsFromAST(local_ast);
+              let localVariableReferences: ASTNode[] = variableParser.getVariableReferencesFromAST(local_ast);
+              let localFunctionalVariableDefinitions: Map<string, [ASTNode[], Range[]]> = variableParser.getFunctionalVariableDefinitionsFromAST(local_ast);
+              
+        
+              let localFunctionReferences: ASTNode[] = functionParser.getFunctionReferencesFromAST(local_ast);
+              let allVariableDefinitions: Map<string, ASTNode[]> = new Map([...localVariableDefinitions, ...parentVariableDefinitions]);
+        
+
+              function isValid(node: ASTNode, varName: string){
+                let res = localFunctionalVariableDefinitions.get(varName)!;
+                let results: boolean[] = [];
+                if(res){
+                  for(let i = 0; i < res[0].length; i++){
+                    if(isBefore(res[1][i], node.range)){
+                      results.push(false);
+                    } else {
+                      results.push(true);
+                    }
+                  }
+                 
+                return results.includes(true);
+                }
               }
-              if (position.line > range.end.line || (position.line === range.end.line && position.character > range.end.character)) {
-                return false;
+        
+              for(const node of localVariableReferences){
+                const variableName = node.value.split(" ")[1];
+                
+                // Undefined variables
+                if (
+                  !allVariableDefinitions.has(variableName) &&
+                  !isValid(node, variableName)
+                
+                ){
+                  undefinedVariables.push(node);
+                } 
+                
+        
+                // Uninitialized variables
+                if(
+                  allVariableDefinitions.has(variableName) &&
+                  // AST.isBefore(allVariableDefinitions.get(variableName)![0].range, node.range)
+                  AST.isBefore(node.range, allVariableDefinitions.get(variableName)![0].range)
+                  )
+                
+                  {
+                    uninitializedVariables.push(node);
+                }
+        
+                // Duplicate declarations
+                for(const varDef of allVariableDefinitions.keys()){
+                  if(allVariableDefinitions.get(varDef)!.length > 1){
+                    duplicateDeclarations = [...duplicateDeclarations, ...allVariableDefinitions.get(varDef)!];
+                  }
+                }
               }
-              return true;
+        
+              for(const node of localFunctionReferences) {
+                let currfunctionName = functionParser.getFunctionNameFromFnAppl(node);
+        
+                const availableFunctions: Set<string> = functionParser.getAvailableFunctionsToCall(node);
+                availableFunctions.add(functionParser.getName(local_ast));
+        
+                // Undefined functions
+                if(!availableFunctions.has(currfunctionName) && !LinksParserConstants.LINKS_FUNCS.has(currfunctionName)){
+                  undefinedFunctions.push(node);
+                }
+              }
+        
+              // Function call parameter count
+              let numParams = functionParser.getFunctionParams(local_ast).length;
+              let allFunctionCalls: ASTNode[] = functionParser.getFunctionCallsAsAST(ast!, functionName);
+        
+              for(const calls of allFunctionCalls){
+                let currParams = calls.children!.slice(1).length;
+                if(currParams !== numParams){
+                  incorrectParamNumber.set( 
+                    calls.children![0].range, 
+                    {
+                      node: calls.children![0],
+                      actualNumCount: currParams,
+                      expectedNumCount: numParams
+                    }
+                ); 
+                }
+              }
+        
+              let nestedFunctions: ASTNode[] = functionParser.getNextLevelFunctions(local_ast);
+              for(const nestedFunction of nestedFunctions){
+                processFunction(nestedFunction, allVariableDefinitions);
+              }
+            }
+        
+            // Since we wrap the entire code in a dummy function, the first child of the AST is of value "Fun"
+            let startNode = ast!.children![0];
+            processFunction(startNode, new Map());
+        
+            type DiagnosticInfo = {
+                node: AST.ASTNode,
+                firstMessage: string,
+                secondMessage: string
+            };
+
+            let allDiagnostics: DiagnosticInfo[] = [
+                  ...undefinedVariables.map(varNode => (
+                    {
+                      node: varNode, 
+                      firstMessage: `Variable ${varNode.value.split(" ")[1]} is not defined`,
+                      secondMessage:`Consider defining ${varNode.value.split(" ")[1]} before using it`
+                    } as DiagnosticInfo
+                  )),
+                  ...undefinedFunctions.map(fun => (
+                    {
+                      node: fun, 
+                      firstMessage: `Function ${AST.functionParser.getFunctionNameFromFnAppl(fun)} is not defined`,
+                      secondMessage:`Consider defining "${AST.functionParser.getFunctionNameFromFnAppl(fun)}" before using it`
+                    } as DiagnosticInfo
+                  )),
+                  ...duplicateDeclarations.map(dup => (
+                    {
+                      node: dup,
+                      firstMessage: `Variable ${dup.value.split(" ")[1]} is declared twice.`,
+                      secondMessage: `Either remove one declaration or reuse the variable.`
+                    }
+                  )),
+                  ...uninitializedVariables.map(uninit => (
+                    {
+                      node: uninit,
+                      firstMessage: `Variable ${uninit.value.split(" ")[1]} is used before being initialized.`,
+                      secondMessage: `Consider initializing ${uninit.value.split(" ")[1]} before using it.`
+                    }
+                  )),
+                  ...Array.from(incorrectParamNumber.values()).map(incorr => (
+                    {
+                      node: incorr.node,
+                      firstMessage: `Incorrect number of arguments`,
+                      secondMessage: `Expected ${incorr.expectedNumCount} arguments, but got ${incorr.actualNumCount}.`
+                    }
+                  ))
+                ];
             
-        }
+            return allDiagnostics;
+    }
+
+    // Given a position on the VSCode document, return the Node in the AST
+    // that corresponds to that position.
+    export function findNodeAtPosition(ast: ASTNode, position: Position): ASTNode | null {
         let foundNode: ASTNode | null = null;
+        let maxIter = 1;
+        let currIter = 0;
+        let foundNodes: ASTNode[] = [];
         function traverse(node: ASTNode): ASTNode | null {
             if(node.children) {
                 for(const child of node.children) {
                     let child_range = child.range;
-                    
-                    // if(child_range.start.line === child_range.end.line) {
                     let start = child_range.start.character;
                     let end = child_range.end.character;
-
-                    if((position.line+1) === child_range.start.line) {
+                    
+                    if((position.line) === child_range.start.line) {
                         if(position.character >= start) {
-                            if(position.line+1 < child_range.end.line ) {
+                            if(position.line < child_range.end.line ) {
                                 foundNode = child;
-                            } else if (position.line+1 === child_range.end.line) {
+                                foundNodes.push(child);
+                            } else if (position.line === child_range.end.line) {
                                 if(position.character <= end) {
                                     foundNode = child;
+                                    foundNodes.push(child);
+
                                 }
                             }   
-                            // return child;
                         } else if (position.character === start-1) {
                             foundNode = child;
+                            foundNodes.push(child);
+
                         }
                     }
-                    // } 
                     traverse(child);
                 }
             }
             return null;
         }
+
         traverse(ast);
+        // This is to account for Signature's not
+        // existing in the AST. However, what is true
+        // is that the Siganture always exists
+        // one line above the function implementation
+        // so we just check the line above the function.
+        if(foundNode === null && currIter < maxIter) {
+            position = Position.create(
+                position.line-1,
+                position.character  
+            );
+            traverse(ast);
+        }
+        currIter += 1;
+
+
+        if(foundNodes.length !== 1){
+            foundNode = getClosestNode(foundNodes, position);
+        }
+
         return foundNode; 
+    }
+
+    export function getClosestNodeFromAST(ast: ASTNode, position: Position): ASTNode {
+        let ret: ASTNode = ast;
+        let MindistToStartLine = Number.MAX_VALUE;
+        let MindistToEndLine = Number.MAX_VALUE;
+
+        let MindistToStartChar = Number.MAX_VALUE;
+        let MindistToEndChar = Number.MAX_VALUE;
+
+        let totalDist = Number.MAX_VALUE;
+        function traverse(node: ASTNode){
+
+            let distToStartLine = Math.abs(node.range.start.line - position.line);
+            let distToEndLine = Math.abs(node.range.end.line - position.line);
+
+            let distToStartChar = Math.abs(node.range.start.character - position.character);
+            let distToEndChar = Math.abs(node.range.end.character - position.character);
+            
+            let currDist = distToStartLine + distToEndLine + distToStartChar + distToEndChar;
+
+            if(
+                position.line === node.range.start.line &&
+                distToStartLine <= MindistToStartLine &&
+                distToEndLine <= MindistToEndLine &&
+                distToStartChar <= MindistToStartChar &&
+                distToEndChar <= MindistToEndChar 
+                && currDist <= totalDist
+            ) {
+                ret = node;
+                totalDist = currDist;
+                MindistToStartLine = distToStartLine;
+                MindistToEndLine = distToEndLine;
+                MindistToStartChar = distToStartChar;
+                MindistToEndChar = distToEndChar;
+            }
+
+            if(node.children){
+                for(const child of node.children){
+                    traverse(child);
+                }
+            }
+        }
+        traverse(ast);
+        return ret;
+
+    }
+
+    function getClosestNode(nodes: ASTNode[], position: Position): ASTNode {
+        let ret: ASTNode = nodes[0];
+
+        let MindistToStartLine = Number.MAX_VALUE;
+        let MindistToEndLine = Number.MAX_VALUE;
+
+        let MindistToStartChar = Number.MAX_VALUE;
+        let MindistToEndChar = Number.MAX_VALUE;
+
+        for(const node of nodes){
+
+            let distToStartLine = Math.abs(node.range.start.line - position.line);
+            let distToEndLine = Math.abs(node.range.end.line - position.line);
+
+            let distToStartChar = Math.abs(node.range.start.character - position.character);
+            let distToEndChar = Math.abs(node.range.end.character - position.character);
+
+            if(
+                distToStartLine <= MindistToStartLine &&
+                distToEndLine <= MindistToEndLine &&
+                distToStartChar <= MindistToStartChar &&
+                distToEndChar <= MindistToEndChar
+            ) {
+                ret = node;
+                MindistToStartLine = distToStartLine;
+                MindistToEndLine = distToEndLine;
+                MindistToStartChar = distToStartChar;
+                MindistToEndChar = distToEndChar;
+            }
+
+
+
+            // if(lineDiff < minLineDiff){
+            //     minLineDiff = lineDiff;
+            //     minCharDiff = charDiff;
+            //     ret = node;
+            // } else if (lineDiff === minLineDiff && charDiff < minCharDiff){
+            //     minCharDiff = charDiff;
+            //     ret = node;
+            // }
+        }
+        return ret;
     }
 
     export function getVariableReferences(node: AST.ASTNode, ast: AST.ASTNode): ASTNode[] {
@@ -178,7 +460,7 @@ export namespace AST {
         function traverse(currentNode: ASTNode) {
             if(currentNode.type === "Node" &&
                currentNode.value === "Fun" && 
-               referenceNode.range.start.line-1 >= currentNode.range.start.line 
+               referenceNode.range.start.line-2 >= currentNode.range.start.line 
             ) {
                 functionNode = currentNode;
             }
@@ -321,7 +603,8 @@ export namespace AST {
         return valid_nodes;
     }
 
-    function isBefore(range1: Range, range2: Range): boolean {
+    export function isBefore(range1: Range, range2: Range): boolean {
+
         if (range1.end.line < range2.start.line) {
           return true;
         }
@@ -331,7 +614,7 @@ export namespace AST {
         return false;
       }
       
-      function isAfter(range1: Range, range2: Range): boolean {
+      export function isAfter(range1: Range, range2: Range): boolean {
         if (range1.start.line > range2.end.line) {
           return true;
         }
@@ -520,22 +803,292 @@ export namespace AST {
             return node.parent!.value === "NormalFunLit";
         }
 
+        export function getName(node: ASTNode): string{
+            return node.value.split(" ")[1];
+        }
 
+
+        // Returns a Map of Variable names and a list ASTNodes of the times it's been defined
+        // Decided to modify this function which previously only returned a Set of function names
+        // Did this to support the 'duplicate declaration' detection
+        export function getVariableDefinitionsFromAST(ast: ASTNode): Map<string, ASTNode[]> {
+            let ret = new Map<string, ASTNode[]>();
+
+            function traverse(currentNode: ASTNode){
+                let varName;
+                // console.log(currentNode.value, "pls");
+
+                if(
+                    (currentNode.type === "Leaf" && 
+                    currentNode.value.substring(0, 9) === "Variable:" && 
+                    isRealVariable(currentNode) && 
+                    (currentNode.parent!.value === "Val" || currentNode.parent!.value === "NormalFunlit"))
+                    
+                ) {
+                    // "Variable: x" therefore V makes sense
+                    varName = currentNode.value.split(" ")[1];
+                // Commented below out but forgot the reason why it was out...
+                // } else if (
+                //     (currentNode.type === "Leaf" &&
+                //         currentNode.value.substring(0, 9) === "Constant:" &&
+                //         currentNode.parent!.parent!.value === "TableLit")
+                // ) {
+                //     let regex = new RegExp(`CommonTypes\\.Constant\\.String\\s*"([^"]*)"`);
+                //     let match = regex.exec(currentNode.value);
+                //     varName = match![1];
+                } else {
+                    varName = "\0";
+                }
+
+                
+                if(varName !== "\0"){
+                    if(ret.has(varName)){
+                        ret.set(varName, [...ret.get(varName)!, currentNode]);
+                    } else {
+                        ret.set(varName, [currentNode]);     
+                    }
+                }
+
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        if(child.value !== "Fun"){
+                            traverse(child);
+                        }
+                    }
+                }
+            }
+            traverse(ast);
+            return ret;
+        }
+
+        // Returns the first node of value "Variable: {variable_name}" in the AST
+        // from an Iteration Node. This node serves as the 'variable' definition
+        // for functional patterns like `{for x <-- accounts [x]}
+        function getVariableDefinitionFromIteration(ast: ASTNode): ASTNode | null {
+            let ret: ASTNode[] = [];
+
+            function traverse(currentNode: ASTNode){
+                if(
+                    currentNode.type === "Leaf" && 
+                    currentNode.value.substring(0, 9) === "Variable:" && 
+                    isRealVariable(currentNode)
+                ) {
+                    ret.push(currentNode);
+                }
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        traverse(child);
+                    }
+                }
+            }
+            traverse(ast);
+            if(ret.length === 0){
+                return null;
+            }
+            return ret[0]; // Returns the same node if no variable definition is found
+        }
+
+        export function getFunctionalVariableDefinitionsFromAST(ast: ASTNode): Map<string, [ASTNode[], Range[]]> {
+            // need to return the range for which the node is valid for asw..........
+            // return Tuple of a list of ASTNode's and a list of Range's where the ith element of each list
+            // correspond to each other
+            let ret: Map<string, [ASTNode[], Range[]]> = new Map();
+
+            function traverse(currentNode: ASTNode){
+
+                if(
+                    currentNode.type === "Node" &&
+                    (currentNode.value === "DBDelete" || currentNode.value === "DBUpdate")
+                ) {
+                    let varName = currentNode.children![0].value.split(" ")[1];
+                    if(ret.has(varName)) {
+                        ret.set(varName, [
+                            [...ret.get(varName)![0], currentNode.children![0]],
+                            [...ret.get(varName)![1], currentNode.range]
+                        ]);
+                    } else {
+                        ret.set(varName, [[currentNode.children![0]], [currentNode.range]]);
+                    }
+                } else if (currentNode.type === "Node" && currentNode.value === "Iteration") {
+                    if(currentNode.children){
+                        for(const child of currentNode.children!) {
+                            let varNode = getVariableDefinitionFromIteration(child);
+                            if(varNode !== currentNode && varNode !== null){
+                                let varName = varNode.value.split(" ")[1];
+                                if(ret.has(varName)) {
+                                    ret.set(varName, [
+                                        [...ret.get(varName)![0], varNode],
+                                        [...ret.get(varName)![1], currentNode.range]
+                                    ]);
+                                } else {
+                                    ret.set(varName, [[varNode], [currentNode.range]]);
+                                }
+
+
+                            }
+                        }
+                    }
+
+                    // let varNode = getVariableDefinitionFromIteration(currentNode);
+                    // console.log("varNode", JSON.stringify(varNode, removeParentField, 2));
+                    // if(varNode !== currentNode){
+                    //     let varName = varNode.value.split(" ")[1];
+                    //     console.log("varName", varName);
+
+                    //     // Set the nodes range as the Iteration node's range as that's where
+                    //     // the variable is valid
+                    //     if(ret.has(varName)) {
+                    //         ret.set(varName, [
+                    //             [...ret.get(varName)![0], varNode],
+                    //             [...ret.get(varName)![1], currentNode.range]
+                    //         ]);
+                    //     } else {
+                    //         ret.set(varName, [[varNode], [currentNode.range]]);
+                    //     }
+
+                    // }
+
+                }
+
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        traverse(child);
+                    }
+                }
+            }
+
+            traverse(ast);
+            return ret;
+        }
+        
+        export function getVariableReferencesFromAST(ast: ASTNode): ASTNode[] {
+            let ret: ASTNode[] = [];
+            // console.log(ast.children![0].value.split(" ")[1], "function name");
+
+            function traverse(currentNode: ASTNode){
+                if(
+                    currentNode.type === "Leaf" && 
+                    currentNode.value.substring(0, 9) === "Variable:" && 
+                    isRealVariable(currentNode) && 
+                    !isParameter(currentNode) && 
+                    currentNode.parent!.value !== "Variable"
+                ) {
+                    // "Variable: x" therefore V makes sense
+                    ret.push(currentNode);     
+                }
+
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        // Ensures that it doesn't get variable references from nested functions
+                        // The processFunction recursive call should account for variable refernces
+                        // inside nested functions anyway
+                        if(child.value !== "Fun"){
+                            traverse(child);
+                        }
+                    }
+                }
+            }
+            traverse(ast);
+            // console.log(`variables: ${JSON.stringify(ret, removeParentField, 2)}`);
+            return ret;
+        }
+
+
+        // Returns whether the current ASTNode contains the definition of a variable
+        // Should only accept ASTNode's of value 'Fun'
+        export function containsVarDefinition(node: ASTNode, name: string): boolean{
+            let ret = false;
+
+            function traverse(currentNode: ASTNode){
+
+                if(
+                    currentNode.type === "Leaf" && 
+                    currentNode.value === `Variable: ${name}` && 
+                    isRealVariable(currentNode) &&
+                    currentNode.parent &&
+                    (currentNode.parent.value === "Val" || currentNode.parent.value === "NormalFunlit")
+                ) {
+                    ret = true;
+                }
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        // Stop traversing if there's a nested function 
+                        if(child.value !== "Fun"){
+                            traverse(child);
+                        }
+                    }
+                }
+            }
+            traverse(node);
+            return ret || variableParser.getFunctionalVariableDefinitionsFromAST(node).has(name); 
+        }
+
+        // Given a variable node (node with value 'Variable: {variable_name}'), return 
+        // the node which describes its definition.
+        // Doesn't work for variables:
+        // (1) Defined in iterators
+        export function extractVariableDefinition(varNode: ASTNode): ASTNode | null{
+
+            let ScopeNode = getVariableScopeAsASTNode(varNode, varNode);
+
+            let ret: ASTNode | null = null;
+
+            function traverse(currentNode: ASTNode){
+                if(
+                    currentNode.type === "Leaf" &&
+                    currentNode.value === `Variable: ${getName(varNode)}` &&
+                    (currentNode.parent!.value === "Val" || currentNode.parent!.value ==="NormalFunlit" || (currentNode.parent && currentNode.parent.parent && currentNode.parent.parent.value === "Iteration"))
+                ) {
+                    ret = currentNode;
+                }
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        // Already determined scope of variable so no need to traverse further
+                        if(child.value !== "Fun"){
+                            traverse(child);
+                        }
+                    }
+                }
+            }
+
+            traverse(ScopeNode);
+            return ret;
+        }
+
+        function getVariableScopeAsASTNode(varNode: ASTNode, traversalNode: ASTNode): ASTNode {
+            let currNode = traversalNode;
+            let varName = variableParser.getName(varNode);
+            while
+            (
+                currNode.value !== "No Signature" && 
+                currNode.value !== "Fun" && 
+                currNode.value !== "Signature"            
+            ){
+                currNode = currNode.parent!;
+            }
+
+            if(containsVarDefinition(currNode, varName)){
+                return currNode;
+            } else {
+                return getVariableScopeAsASTNode(varNode, currNode.parent!);
+            }
+
+        }
+    
         // variableNodes: All nodes with value `Variable: {variable_name}`
         export function extractUnusedVariables(variableNodes: ASTNode[]): ASTNode[]{
             let ret: ASTNode[] = [];
 
-            function getVariableScopeAsASTNode(node: ASTNode): ASTNode {
-                let currNode = node;
-                while(currNode.value !== "NormalFunlit"){
-                    currNode = currNode.parent!;
-     
-                }
-                return currNode;
-            }
+            
 
             for(const node of variableNodes){
-                let parentNode: ASTNode = getVariableScopeAsASTNode(node);
+                let parentNode: ASTNode = getVariableScopeAsASTNode(node, node);
                 let variableMap: Map<String, number> = new Map();
 
                 function traverse(currentNode: ASTNode) {
@@ -601,6 +1154,79 @@ export namespace AST {
 
     export namespace functionParser {
 
+        // Returns a Map of Function names and a list ASTNodes of the times it's been defined
+        // Decided to follow implementation of VariableDefinitionsFromAST which returns all
+        // instances of a functions definition so that that diagnostic can be implemented too.
+        export function getFunctionDefinitionsFromAST(ast: ASTNode): Map<string, ASTNode[]>{
+            let ret: Map<string, ASTNode[]> = new Map<string, ASTNode[]>();
+
+            function traverse(currentNode: ASTNode) {
+
+                if(
+                    currentNode.type === "Node" &&
+                    currentNode.value === "Fun"
+                ) {
+                    const functionName = getName(currentNode);
+                    if(ret.has(functionName)) {
+                        ret.set(functionName, [...ret.get(functionName)!, currentNode]);
+                    } else {
+                        ret.set(functionName, [currentNode]);
+                    }
+                }
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        if(child.value !== "Fun"){
+                            traverse(child);
+                        }
+                    }
+                }
+            }
+
+            traverse(ast);
+            return ret;
+        }
+
+        export function getFunctionReferencesFromAST(ast: ASTNode): ASTNode[] {
+            let ret: ASTNode[] = [];
+            function traverse(currentNode: ASTNode) {
+                if(currentNode.type === "Node" && currentNode.value === "FnAppl") {
+                    ret.push(currentNode);
+                }
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        if(child.value !== "Fun" ){
+                            traverse(child);
+                        }
+                    }
+                }
+            }
+            traverse(ast);
+            return ret;
+        }
+
+        // Given an ASTNode of value "FnAppl" return the function name
+        export function getFunctionNameFromFnAppl(node: ASTNode): string {
+
+
+            let currNode = node.children![0];
+            const operatorNameRegex = new RegExp(`Operators\\.Section\\.Name\\s*"([^"]*)"`);
+            const operatorMatch = operatorNameRegex.exec(currNode.value);
+            if(currNode.value.substring(0,9) === "Variable:"){    
+                // console.log("Returning (1)")        
+                return currNode.value.split(" ")[1];      
+            } else if (operatorMatch){
+                    // Calling an Operator function like +, -, +. etc
+                    const operatorName = operatorMatch![1];
+                    // console.log("Returning (2)")
+                    return operatorName;
+            } else {
+                // console.log("Returning (3)")
+                return LinksParserConstants.OPERATOR_FLOAT_NAME_TO_SYMBOL.get(currNode.value)!;
+            }
+
+        }
+
         export function createFunctionToNumCallsMap(functionCalls: string[]): Map<string, number> {
             let ret = new Map<string, number>();
 
@@ -614,7 +1240,207 @@ export namespace AST {
             return ret;
         }
 
-        // Returns the ASTNode of where a function is called from (not its definition)
+        // Returns the names of all functions accessible from a given ASTNode
+        // normally passses in a "FnAppl" node.
+        export function getAvailableFunctionsToCall(ast: ASTNode) : Set<string> {
+            let ret = new Set<string>();
+
+            function traverseDown(currentNode: ASTNode){
+
+                if(currentNode.type === "Node" && currentNode.value === "Fun"){
+                    if(currentNode.children && 
+                        isBefore(currentNode.children[0].range, ast.range) && 
+                            currentNode !== ast
+                        )
+
+                    {
+                        ret.add(currentNode.children[0].value.split(" ")[1]);
+                    }
+                }
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        traverse(child);
+                    }
+                }
+            }
+
+            function traverseUp(currentNode: ASTNode) {
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        if(child.value === "Fun" && 
+                            isBefore(currentNode.children[0].range, ast.range) && 
+                            currentNode !== ast){
+                            ret.add(child.children![0].value.split(" ")[1]);
+                        } else {
+                            traverseDown(child);
+                        }
+                    }
+                }
+
+                if(currentNode.parent){
+                    traverseUp(currentNode.parent);
+                }
+            }
+            traverseDown(ast);
+            traverseUp(ast);
+            return ret;
+        }
+
+        // Given an ASTNode, return all the function calls
+        // at this level.
+        // (Mainly used for the root level)
+        export function getTopLevelFunctions(ast: ASTNode): ASTNode[]{
+            let ret: ASTNode[] = [];
+
+            if(ast.children){
+                for(const child of ast.children){
+                    if(child.type === "Node" && child.value === "Fun"){
+                        ret.push(child);
+                    }
+                }
+            }
+            return ret;
+
+        }
+
+        // Returns a list of ASTNode's of the function definition
+        // Needed to get the scope of a function
+        // i.e. Value === "Fun"
+        export function getFunctionFromAST(ast: ASTNode): ASTNode[] {
+
+            let ret: ASTNode[] = [];
+
+            function traverse(currentNode:ASTNode){
+
+                // Don't want the same node being added
+                if(currentNode.type === "Node" && 
+                    currentNode.value === "Fun" && 
+                    currentNode !== ast){
+                    ret.push(currentNode);
+                }
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        // Stop traversing when we reach the next Fun
+                        traverse(child);
+                        
+                    }
+                }
+            }
+
+            traverse(ast);
+
+            return ret;
+        }
+
+
+
+        // Given a node of value "Fun", return all the nodes of value "Fun" that are
+        // children of the given node
+        export function getNextLevelFunctions(ast: ASTNode): ASTNode[] {
+            let ret: ASTNode[] = [];
+
+            function traverse(currentNode: ASTNode){
+                if(currentNode.type === "Node" &&
+                    currentNode.value === "Fun" &&
+                    currentNode !== ast
+                ) {
+                    ret.push(currentNode);
+                }
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        if(child.value === "Fun"){
+                            ret.push(child);
+                        } else {
+                            traverse(child);
+                        }
+                    }
+                }
+
+            }
+            traverse(ast);
+
+            return ret;
+        }
+
+        // export function getFunctionReferencesFromAST(ast: ASTNode): ASTNode[] {
+        //     let ret: ASTNode[] = [];
+
+        //     function traverse(currentNode: ASTNode){
+        //         if(currentNode.type === "Node" && currentNode.value === "FnAppl"){
+        //             ret.push(currentNode.children![0]);
+        //         }
+
+        //         if(currentNode.children){
+        //             for(const child of currentNode.children){
+        //                 traverse(child);
+        //             }
+        //         }
+        //     }
+
+        //     traverse(ast);
+        //     return ret;
+        // }
+
+        // Given an ASTNode of value: "Fun", return the params of the function
+        export function getFunctionParams(ast: ASTNode): ASTNode[]{
+            let ret: ASTNode[] = [];
+
+            function traverse(currentNode: ASTNode){
+
+                if(currentNode.type === "Leaf" &&
+                    currentNode.value.substring(0,9) ==="Variable:" &&
+                    currentNode.parent!.value === "NormalFunlit"
+                ){
+                    ret.push(currentNode);
+                }
+
+
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        // Stop exploring when we reach the next Fun
+                        // ProcessFunction will handle the next Fun recursively
+                        if(child.value !== "Fun") {
+                            traverse(child);
+                        }
+                    }
+                }
+            }
+            traverse(ast);
+
+            return ret;
+        }
+
+        // Return the
+        export function getFunctionCallsAsAST(ast: ASTNode, functionName: string): ASTNode[]{
+            let ret: ASTNode[] = [];
+            function traverse(currentNode: ASTNode){
+
+                if(currentNode.type === "Node" && 
+                    currentNode.value === "FnAppl" &&
+                    currentNode.children![0].value.split(" ")[1] === functionName
+                ) {
+                    ret.push(currentNode);
+                }
+
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        traverse(child);
+                    }
+                }
+
+            }
+
+            traverse(ast);
+            return ret;
+        }
+
+
+        // Returns the ASTNode of where a function is called from (not its definition, but literarlly where its called)
+
         export function getFunctionCallers(ast: ASTNode): ASTNode[]{
             let ret: ASTNode[] = [];
 
@@ -703,6 +1529,24 @@ export namespace AST {
             traverse(ast);
             return ret;
         }
+
+        // Given an ASTNode of value: "Fun", return the params of the function
+        export function hasSignature(node: ASTNode){
+            if(node.value !== "Fun"){
+                return false; // If not function return False
+            }
+            return node.children![2].value === "Signature";
+        }
+
+        // Given an ASTNode of value: "Fun", return the functions name
+        export function getName(node: ASTNode): string{
+            if(node.value !== "Fun"){
+                return "";
+            }
+            return node.children![0].value.split(" ")[1];
+        }
+
+
     }
 
 
@@ -717,11 +1561,22 @@ export namespace AST {
         function getAttributes(node: ASTNode): string[] {
             let idx = 1;
             let attributes: string[] = [];
-            while(idx < node.parent!.children!.length-1){
-            // while(node.parent!.children![idx].value.substring(0,9) !==  "TextNode:"){
-                attributes.push(node.parent!.children![idx].value);
-                idx++;
+
+            if(node.parent!.children![node.parent!.children!.length-1].value.substring(0, 9) === "TextNode:"){
+                while(idx < node.parent!.children!.length-1){
+                    // while(node.parent!.children![idx].value.substring(0,9) !==  "TextNode:"){
+                    attributes.push(node.parent!.children![idx].value);
+                    idx++;
+                }
+            } else {
+                while(idx < node.parent!.children!.length){
+                    // while(node.parent!.children![idx].value.substring(0,9) !==  "TextNode:"){
+                    attributes.push(node.parent!.children![idx].value);
+                    idx++;
+                }
             }
+
+
             return attributes;
             // for(const nd of node.parent!.children!){
             //     if(nd.value === "type"){
@@ -739,14 +1594,16 @@ export namespace AST {
         function createAttributeRegexMap(attributes: string[]): Map<string, RegExp> {
             let map = new Map<string, RegExp>();
             for(const attribute of attributes){
-                let regex = new RegExp(`${attribute}`, 'g');
+                let regex = new RegExp(`${attribute}=`, 'g');
                 map.set(attribute, regex);
             }
             return map;
         }
 
         export function extractSemantics(xmlNodes: ASTNode[], documentText: string): ASTNode[] {
-            let ret: ASTNode[] = [];
+            // let ret: ASTNode[] = [];
+
+            let ret: Map<string, ASTNode> = new Map();
 
             let xmlNames: string[] = [];
             let xmlBlocksProcessed: Set<string> = new Set();
@@ -783,7 +1640,9 @@ export namespace AST {
 
                     const nodeMatches: Range[] = []; // XML Block i.e. inside the <>'s
                     const tags: Range[] = []; // the tags themselves i.e. < and >
-                    const attributes: Range[] = []; // the attributes like type, id, and l:{handler}
+                    // const attributes: Set<Range> = new Set(); // the attributes like type, id, and l:{handler}
+                    const attributes: Map<string, Range> = new Map();
+                    
                     let canAddAttributes = false;
                     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
                         let line = lines[lineIndex];
@@ -795,39 +1654,37 @@ export namespace AST {
                         // looks for <{node.value}
                         while ((match = openingPattern.exec(line)) !== null) {
                             nodeMatches.push(Range.create(
-                                Position.create(lineIndex+1, match.index+2),
-                                Position.create(lineIndex+1, match.index+2 + node.value.length)
+                                Position.create(lineIndex+2, match.index+2),
+                                Position.create(lineIndex+2, match.index+2 + node.value.length)
                             ));
 
                             tags.push(Range.create(
-                                Position.create(lineIndex+1, match.index+1),
-                                Position.create(lineIndex+1, match.index+2)
+                                Position.create(lineIndex+2, match.index+1),
+                                Position.create(lineIndex+2, match.index+2)
                             ));
-
-
-                            
-                            
                             canAddAttributes = true;
-
-
                         }
 
                         // Looks for attributes
                         if(canAddAttributes){
-                            for(const [attribute, regex] of attributeRegexMap){
-                                while((match = regex.exec(line)) !== null){
-                                    attributes.push(Range.create(
-                                        Position.create(lineIndex+1, match.index+1),
-                                        Position.create(lineIndex+1, match.index+1 + attribute.length)
-                                    ));
+                            for(let i = node.range.start.line-2; i < node.range.end.line; i++) {
+                                for(const [attribute, regex] of attributeRegexMap){
+                                    while((match = regex.exec(lines[i])) !== null){
+                                        let range =  Range.create(
+                                            Position.create(i+2, match.index+1),
+                                            Position.create(i+2, match.index+1 + attribute.length)
+                                        );
+                                        attributes.set(JSON.stringify(range), range);
+                                    }
                                 }
                             }
                         }
+
                         // looks for '>'
                         while((openingTagClosingXMLTagMatch = closingTagPattern.exec(line)) !== null){
                             tags.push(Range.create(
-                                Position.create(lineIndex+1, openingTagClosingXMLTagMatch.index+1),
-                                Position.create(lineIndex+1, openingTagClosingXMLTagMatch.index+2)
+                                Position.create(lineIndex+2, openingTagClosingXMLTagMatch.index+1),
+                                Position.create(lineIndex+2, openingTagClosingXMLTagMatch.index+2)
                             ));
                             canAddAttributes = false;
                         }
@@ -835,8 +1692,8 @@ export namespace AST {
                         // looks for '/>'
                         while((openingTagClosingXMLTagMatch = closingTagPatternAlt.exec(line)) !== null){
                             tags.push(Range.create(
-                                Position.create(lineIndex+1, openingTagClosingXMLTagMatch.index+1),
-                                Position.create(lineIndex+1, openingTagClosingXMLTagMatch.index+3)
+                                Position.create(lineIndex+2, openingTagClosingXMLTagMatch.index+1),
+                                Position.create(lineIndex+2, openingTagClosingXMLTagMatch.index+3)
                             ));
                             canAddAttributes = false;
                         }
@@ -846,17 +1703,17 @@ export namespace AST {
                        
                         while ((match = closingPattern.exec(line)) !== null) {
                             nodeMatches.push(Range.create(
-                                Position.create(lineIndex+1, match.index+3),
-                                Position.create(lineIndex+1, match.index + match[0].length)
+                                Position.create(lineIndex+2, match.index+3),
+                                Position.create(lineIndex+2, match.index + match[0].length)
                             ));
                             
                             tags.push(Range.create(
-                                Position.create(lineIndex+1, match.index+1),
-                                Position.create(lineIndex+1, match.index+3)
+                                Position.create(lineIndex+2, match.index+1),
+                                Position.create(lineIndex+2, match.index+3)
                             ));
                             tags.push(Range.create(
-                                Position.create(lineIndex+1, match.index + match[0].length),
-                                Position.create(lineIndex+1, match.index + match[0].length+1)
+                                Position.create(lineIndex+2, match.index + match[0].length),
+                                Position.create(lineIndex+2, match.index + match[0].length+1)
                             ));
                         }
                     }
@@ -865,37 +1722,59 @@ export namespace AST {
                     xmlBlocksProcessed.add(node.value);
 
                     for(const range of nodeMatches){
-                        ret.push({
+                        let newNode = 
+                        {
                             type: node.type,
                             value: node.value,
                             range: range,
                             parent: node.parent
-                        });
+                        } as ASTNode;
+
+                        ret.set(JSON.stringify(newNode, removeParentField), newNode);
+                        // ret.push({
+                        //     type: node.type,
+                        //     value: node.value,
+                        //     range: range,
+                        //     parent: node.parent
+                        // });
                     }
 
                     for(const tag of tags){
-                        ret.push({
+                        let newNode = {
                             type: node.type,
                             value: "xmlTag",
                             range: tag,
                             parent: node.parent
-                        });
+                        } as ASTNode;
+                        ret.set(JSON.stringify(newNode, removeParentField), newNode);
+                        // ret.push({
+                        //     type: node.type,
+                        //     value: "xmlTag",
+                        //     range: tag,
+                        //     parent: node.parent
+                        // });
                     }
 
-                    for(const attribute of attributes){
-                        ret.push({
+                    for(const attribute of attributes.values()){
+                        let newNode = {
                             type: node.type,
                             value: "xmlAttribute",
                             range: attribute,
                             parent: node.parent
-                        });
+                        } as ASTNode;
+                        ret.set(JSON.stringify(newNode, removeParentField), newNode);
+                        // ret.push({
+                        //     type: node.type,
+                        //     value: "xmlAttribute",
+                        //     range: attribute,
+                        //     parent: node.parent
+                        // });
                     }
 
-
-                    
+                    // console.log(`[XML] attributes: ${JSON.stringify(Array.from(attributes), removeParentField, 2)}`);
                 }
             }
-            return ret;
+            return Array.from(ret.values());
         }
 
 
@@ -907,9 +1786,9 @@ export namespace AST {
 
             for(const node of nodes){
                 let range = node.range;
-                let firstLine = lines[range.start.line-1];
+                let firstLine = lines[range.start.line-2];
 
-                let lastLine = lines[range.end.line-1];
+                let lastLine = lines[range.end.line-2];
 
                 // The best scenario
                 // This handles the case where the opening and closing tags are on separate lines
@@ -1106,5 +1985,38 @@ export namespace AST {
             return ""; // Return "" if "TextNode:" is not present
         }
     }
+
+
+    // Given the document as a String, a Range, AND a regex, return the EXACT position
+    // that the Regex ocurrs. 
+    // Should only be used if the AST doesn't provide precise enough positional informaiton
+    // Will only return the first ocurrence of the match.
+    export function extractRegexPosition(documentText: string, nodeRange: Range, regex: RegExp): Range {
+        // console.log(`[extractRegexPosition] Extracting regex position for ${regex} in range ${JSON.stringify(nodeRange)}`);
+        const documentByLine = documentText.split("\n");
+        const startLine = nodeRange.start.line-2;
+        const endLine = nodeRange.end.line-2;
+        for(let i = startLine; i < endLine; i++) {
+            const line = documentByLine[i];
+            const match = regex.exec(line);
+            if(match){
+                return Range.create(
+                    Position.create(i+2, match.index+1),
+                    Position.create(i+2, match.index+1 + match[0].length)
+                );
+            }
+        }
+
+        // Returns the original range if no match is found
+        return nodeRange;
+    }
+
+
+
+
+
+
+
+
 }
 

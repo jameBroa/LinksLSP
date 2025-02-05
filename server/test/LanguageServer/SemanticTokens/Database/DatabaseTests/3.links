@@ -1,0 +1,7 @@
+
+var db = database "links";
+
+var accounts = table "accounts" with (id: Int, accounttype: String, balance: Float) from db;
+
+delete (val <-- accounts)
+        where (val.id==3) 

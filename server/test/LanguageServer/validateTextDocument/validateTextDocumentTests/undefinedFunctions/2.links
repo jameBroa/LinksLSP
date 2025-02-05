@@ -1,0 +1,13 @@
+
+fun foo(){
+    fun inner(){
+        1
+    }
+    foo()
+}
+
+fun test(){
+    1
+}
+
+inner() 

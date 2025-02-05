@@ -1,0 +1,10 @@
+
+fun recursive(x){
+    if(x < 0){
+        1
+    } else {
+        recursive(x-1)
+    }
+} 
+ 
+() 

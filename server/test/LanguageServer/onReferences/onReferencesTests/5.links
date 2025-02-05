@@ -1,0 +1,29 @@
+
+fun outer(){
+    fun inner(){
+        fun inner_inner(){
+            3
+        }
+        var x = 1 + inner_inner(); 
+        fun second_inner(){
+            inner_inner() + x
+        }
+        second_inner() + 4
+    }
+    inner()
+}
+
+fun test(){
+    fun inner(){
+        2
+    }
+    fun inner_inner(){
+        fun second_inner(){ 
+            inner()
+        }
+        3+second_inner()
+    }
+    outer() + inner()+inner_inner()
+}
+
+() 

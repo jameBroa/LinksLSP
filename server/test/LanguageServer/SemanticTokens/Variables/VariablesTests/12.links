@@ -1,0 +1,12 @@
+fun outer(param){
+    fun inner(){
+        param
+    }
+    inner()
+}
+
+fun foo2(input){
+    input
+} 
+
+()

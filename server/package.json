@@ -13,8 +13,25 @@
 		"antlr4ts-cli": "^0.5.0-alpha.4",
 		"async-mutex": "^0.5.0",
 		"lodash": "^4.17.21",
+		"ts-node": "^10.9.2",
 		"vscode-languageserver": "^9.0.1",
-		"vscode-languageserver-textdocument": "^1.0.11"
+		"vscode-languageserver-textdocument": "^1.0.11",
+		"vscode-uri": "^3.0.8"
 	},
-	"scripts": {}
+	"scripts": {
+		"test": "mocha -r ts-node/register test/**/*.test.ts --node-ipc --recursive --require mocha-suppress-logs",
+		"test:semanticTokens": "mocha test/LanguageServer/SemanticTokens/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
+		"test:onDefinition": "mocha test/LanguageServer/onDefinition/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
+		"test:onReferences": "mocha test/LanguageServer/onReferences/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs"
+	},
+	"devDependencies": {
+		"@types/sinon": "^17.0.3",
+		"@vscode/test-cli": "^0.0.10",
+		"@vscode/test-electron": "^2.4.1",
+		"chai": "^5.1.2",
+		"mocha": "^11.1.0",
+		"mocha-junit-reporter": "^2.2.1",
+		"mocha-suppress-logs": "^0.5.1",
+		"sinon": "^19.0.2"
+	}
 }

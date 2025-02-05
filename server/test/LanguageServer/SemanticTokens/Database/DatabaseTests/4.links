@@ -1,0 +1,10 @@
+
+var db = database "links";
+
+var accounts = table "accounts" with (id: Int, accounttype: String, balance: Float) from db;
+
+insert accounts values (id, accounttype, balance) [
+        (id=1, accounttype = "Current", balance = 100.0),
+        (id=2, accounttype = "Savings", balance = 5.0),
+        (id=3, accounttype = "Current", balance = 12.5)
+    ] 

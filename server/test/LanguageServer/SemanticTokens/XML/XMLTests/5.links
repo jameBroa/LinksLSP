@@ -1,0 +1,12 @@
+
+fun example(){
+    page
+        <html>
+            <body>
+                <div id="continer" class="super-container">
+                </div>
+            </body> 
+        </html>
+} 
+
+example()

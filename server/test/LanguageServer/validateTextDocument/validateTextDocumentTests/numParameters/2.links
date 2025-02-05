@@ -1,0 +1,10 @@
+
+fun foo(a,b){
+    a+b
+}
+
+fun main(){
+    foo(1)
+}
+
+()  

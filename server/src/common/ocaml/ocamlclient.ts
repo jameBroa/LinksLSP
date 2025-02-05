@@ -57,11 +57,6 @@ export class OCamlClient{
 
             client.on('data', (data) => {
                 console.log("[OCamlClient] Receiving data....");
-                // console.log(data.toString(), "DATA");
-                // console.log(`[OCamlClient] Received data: "${data.toString()}" from OCaml server`);
-                // // console.log(JSON.stringify(JSON.parse(data.toString()), null, 2), "literarlly parsed to json");
-                // // resolve(data.toString());
-                // resolve(JSON.stringify(JSON.parse(data.toString()), null, 2));
                 full_data += data.toString();
             });
 

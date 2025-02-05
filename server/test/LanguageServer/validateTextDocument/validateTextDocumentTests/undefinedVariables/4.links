@@ -1,0 +1,8 @@
+
+fun iteration(){
+    var x = [1,2,3,4,5];
+    var z = for (y <- x) [y+y];
+    z+y 
+}
+    
+iteration()

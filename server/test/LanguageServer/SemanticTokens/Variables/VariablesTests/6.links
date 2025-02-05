@@ -1,0 +1,11 @@
+
+fun foo(x){
+    var a = 1;
+    var b = a+2;
+    fun bar(){
+        a+1+x
+    }
+    b+bar()
+}
+
+foo(4)

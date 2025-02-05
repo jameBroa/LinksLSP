@@ -1,0 +1,7 @@
+fun declarations(){
+    var x = 1;
+    var y = 1+j;
+    var z = 1;
+    x+y+z+a
+}
+()

@@ -1,0 +1,18 @@
+
+fun foo(){
+    var a = 1;
+    var b = a+2;
+    fun bar(){
+        fun car(){
+            var x = 10;
+            fun coo(){
+                a+x
+            }
+            a+coo()
+        }
+        a+1+car()
+    }
+    b+bar()
+}
+
+foo() 

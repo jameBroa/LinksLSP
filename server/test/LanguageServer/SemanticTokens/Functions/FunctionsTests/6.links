@@ -1,0 +1,7 @@
+
+sig foo: () -> Int
+fun foo(){
+    1
+}
+
+2 

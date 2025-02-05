@@ -1,0 +1,10 @@
+fun foo(used, unused){
+    used
+}
+
+fun foo2(input){
+    var unused = 1; 
+    input
+} 
+
+()

@@ -1,0 +1,10 @@
+sig outter: (Int) -> Int
+fun outter(x){
+    sig inner: (Int) -> Int
+    fun inner(y){
+        y+x
+    }
+    inner(x)
+}
+
+outter(5)  

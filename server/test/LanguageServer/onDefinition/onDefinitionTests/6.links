@@ -1,0 +1,17 @@
+
+fun example(x){ 
+    fun inner(){
+        fun inner_inner(){
+            fun inner_inner_inner(){
+                fun inner_inner_inner_inner(){
+                    x
+                }
+                inner_inner_inner_inner()+x
+            }
+            inner_inner_inner()+x
+        }
+        inner_inner()+x
+    }
+    inner()+x
+}
+example(4)

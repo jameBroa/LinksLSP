@@ -1,0 +1,14 @@
+
+fun example(){
+    page
+        <html>
+            <body class="container">
+                <div 
+                id="main-div"
+                class="super-div">
+                </div>
+            </body>
+        </html>
+}
+
+example()

@@ -1,0 +1,6 @@
+
+fun is_odd(x){
+    mod(x, 2) == 0
+}
+
+is_odd(4) 

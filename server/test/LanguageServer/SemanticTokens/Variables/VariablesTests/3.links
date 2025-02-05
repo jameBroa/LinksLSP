@@ -1,0 +1,10 @@
+
+
+var fruits = ["apple", "banana", "cherry"];
+var nums = [1..4];
+var odds = [1..5];
+
+var y = for (fruit <- fruits, num <- nums, odd <- odds) 
+[(fruit, num, odd)];
+ 
+y

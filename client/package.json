@@ -14,7 +14,9 @@
 		"vscode-languageclient": "^9.0.1"
 	},
 	"devDependencies": {
-		"@types/vscode": "^1.75.1",
-		"@vscode/test-electron": "^2.3.9"
+		"@vscode/test-electron": "^2.3.9",
+		"chai": "^5.1.2",
+		"mocha": "^11.1.0",
+		"sinon": "^19.0.2"
 	}
 }

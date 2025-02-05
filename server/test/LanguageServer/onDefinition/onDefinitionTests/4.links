@@ -1,0 +1,11 @@
+
+fun outer(){
+    fun inner(){
+        fun innerInner(){
+            5
+        }
+        4+innerInner()
+    }
+    inner() + 4
+}
+outer()

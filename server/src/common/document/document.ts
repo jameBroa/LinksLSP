@@ -58,4 +58,9 @@ export namespace DocumentManipulator{
         // console.log(`[DocumentManipulator] AdjustedDocument: ${DocumentByLine.join("\n")}`);
         return DocumentByLine.join("\n");
     }
+    function foo(){
+        let test_str: string = "string";
+        let test_num: number = 10;
+        return test_str + test_num; 
+    }
 }

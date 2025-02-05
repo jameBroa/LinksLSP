@@ -1,0 +1,14 @@
+
+fun example(){
+    page
+        <html>
+            <body>
+                <div 
+                atypical="continer" 
+                attribute="super-container">
+                </div> 
+            </body> 
+        </html>
+}  
+
+example()

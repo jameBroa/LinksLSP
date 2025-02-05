@@ -1,0 +1,7 @@
+
+sig used: (Int) -> Int
+fun used(x){
+    x
+}
+
+used(5) 

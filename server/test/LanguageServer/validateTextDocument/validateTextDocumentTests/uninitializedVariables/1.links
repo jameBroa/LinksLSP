@@ -1,0 +1,9 @@
+
+fun foo(){
+    var y = 1+x;
+    var x = 10;
+    x+y
+} 
+
+foo()
+  

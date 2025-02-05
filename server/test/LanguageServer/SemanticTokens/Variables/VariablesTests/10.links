@@ -1,0 +1,9 @@
+
+fun iteration(){
+    var x = 5;
+    var z = for (y <- x) [x+1];
+    z
+}
+    
+iteration()  
+ 

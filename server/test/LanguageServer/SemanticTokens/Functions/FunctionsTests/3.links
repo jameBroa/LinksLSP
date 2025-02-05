@@ -1,0 +1,9 @@
+
+fun outter(x){
+    fun inner(y){
+        y+x
+    }
+    inner(x)
+}
+
+outter(5) 

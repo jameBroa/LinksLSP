@@ -1,0 +1,20 @@
+
+sig is_odd: (Int) ~> Bool
+fun is_odd(x){
+    if(x == 0){
+        false
+    } else if(x == 1) {
+        true
+    } else {
+        is_odd(x-2)
+    }
+}
+fun filter_nums(x){
+    for (z <- x) 
+        if (is_odd(z))
+            [false]
+        else
+            [true]
+}
+
+filter_nums([1,2,3,4,5])

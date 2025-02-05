@@ -1,0 +1,17 @@
+fun example(){
+    var x = 10;
+    fun inner(){
+        fun inner_inner(){
+            fun inner_inner_inner(){
+                fun inner_inner_inner_inner(){
+                    x
+                }
+                inner_inner_inner_inner()
+            }
+            inner_inner_inner()
+        }
+        inner_inner()
+    }
+    inner()
+}
+example()

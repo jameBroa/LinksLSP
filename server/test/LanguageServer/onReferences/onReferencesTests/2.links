@@ -1,0 +1,8 @@
+sig foo: (Int, Int, Int, Int) -> Int
+fun foo(a,b,c,d) {
+    var x = a*a; 
+    var y = b^c;
+    var z = b*(a+y)/c;
+    z+1
+} 
+()

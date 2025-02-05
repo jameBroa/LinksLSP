@@ -1,0 +1,12 @@
+
+fun example(){
+    page
+        <not>
+            <real>
+                <htmlTag atypical="attribute" here="yup">
+                </htmlTag>
+            </real> 
+        </not> 
+}   
+
+example()   

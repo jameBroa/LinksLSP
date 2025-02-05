@@ -1,0 +1,9 @@
+
+fun foo(){
+    fun bar(){
+        2
+    }
+    1
+}
+
+foo()

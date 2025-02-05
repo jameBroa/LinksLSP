@@ -1,0 +1,8 @@
+fun demo(){
+    var x = 3;
+    var y = 7;
+    var total = x + y;
+    total
+}
+
+demo()

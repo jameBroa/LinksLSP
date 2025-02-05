@@ -1,0 +1,16 @@
+
+fun outer(){
+    fun inner(){
+        1
+    }
+    inner()
+}
+
+fun test(){
+    fun inner(){
+        2
+    }
+    outer() + inner()
+}
+
+() 

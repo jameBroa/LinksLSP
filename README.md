@@ -12,6 +12,8 @@ This repo contains an implementation of a VSCODE Extension for the programming l
 - OnReferences for Function implementations and parameters for Variables
 - OnDefinition for functions, variables (scope defined and parameter variables)
 - Semantic Highlighting in REAL TIME
+- Diagnostics for incorrectly used variables/functions
+- Unit tests
 
 ### Demonstration
 <img width=480 src="./repo_resources/imgs/semantic_highlighting_1.png" alt="Piece of Links code doing CRUD operations with highlighting"/>

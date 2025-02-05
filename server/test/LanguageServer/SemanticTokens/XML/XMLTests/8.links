@@ -1,0 +1,12 @@
+
+fun example(){
+    page
+        <not>
+            <real>
+                <htmlTag>
+                </htmlTag>
+            </real>
+        </not>
+}  
+
+example() 

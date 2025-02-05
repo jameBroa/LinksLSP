@@ -1,0 +1,9 @@
+
+var db = database "links";
+
+var accounts = table "accounts" with (id: Int, accounttype: String, balance: Float) from db;
+
+update (val <-- accounts) 
+        where (val.id == 1) 
+        set (id=1, accounttype="Current", balance=42.7);
+() 

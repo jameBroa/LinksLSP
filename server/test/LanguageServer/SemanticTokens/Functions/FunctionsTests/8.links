@@ -1,0 +1,11 @@
+
+sig foo: () -> Int
+fun foo(){
+    sig bar: () -> Int
+    fun bar(){
+        2
+    }
+    1
+}
+
+foo()
