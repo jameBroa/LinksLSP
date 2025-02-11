@@ -1,0 +1,27 @@
+fun something(){
+    var id = 4;
+    var type = 4;
+    var test = id+type;
+    test#hello
+    #hello
+}
+
+fun xml(){
+    page
+        <html>
+            <body>
+                <div #hello
+                id="unique-div" #hello
+                class="big-div" #hello
+                >
+                    <p id="test">test</p>
+                    <#>test</#>
+                    <#>test</#>
+                    <#/>
+                </div>
+            
+            </body>
+        </html>
+        
+}
+()

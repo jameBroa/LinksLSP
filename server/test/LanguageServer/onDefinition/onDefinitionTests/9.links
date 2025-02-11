@@ -1,0 +1,13 @@
+
+fun test(){
+    fun inner(){
+        4
+    }
+    fun foo(){
+        12
+    } 
+    inner()+foo()+inner()
+}
+
+test()
+# Should return the references of inner() if definition of inner is called on the definition

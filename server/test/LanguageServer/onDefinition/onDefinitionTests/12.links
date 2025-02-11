@@ -1,0 +1,12 @@
+fun foo(){
+    var y = 1;
+    fun bar(){
+        fun goo(){
+            1
+        }
+        var x = 1;
+        x+y+goo()
+    }
+    bar()+goo() # 'goo()' should throw an error
+}
+foo()

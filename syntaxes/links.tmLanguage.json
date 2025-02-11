@@ -3,7 +3,7 @@
   "scopeName": "source.links",
   "patterns": [
       {
-          "match": "\\b(fun|var|if|else|for|while|switch|case|default|module|import|typename|sig|page|database|table|from|insert|update|delete|query|where|set|with|values)\\b",
+          "match": "\\b(fun|var|if|else|for|while|switch|case|default|module|import|typename|sig|page|database|table|from|insert|update|delete|query|where|set|with|values|formlet|yields)\\b",
           "name": "keyword.control.links"
       },
       {

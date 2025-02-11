@@ -1,0 +1,9 @@
+fun foo(){
+    var y = 3;
+    fun bar(){
+        var x = 12;
+        x
+    }
+    x+y # OnDefinition on x should return null
+}
+() 

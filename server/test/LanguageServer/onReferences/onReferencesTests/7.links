@@ -1,0 +1,12 @@
+fun foo(){
+    var y = 1;
+    fun bar(){
+        fun goo(){ # onReferences shouldn't return reference on line 10
+            1
+        }
+        var x = 1;
+        x+y+goo()
+    }
+    bar()+goo() 
+}
+foo()

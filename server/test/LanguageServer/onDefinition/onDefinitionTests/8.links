@@ -1,0 +1,13 @@
+
+fun test(){
+    fun inner(){
+        foo() 
+    }
+    fun foo(){
+        12
+    } 
+    inner()+foo()
+}
+
+test()
+# should return error if we call definition of foo on line 4

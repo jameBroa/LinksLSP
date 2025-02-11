@@ -22,7 +22,9 @@
 		"test": "mocha -r ts-node/register test/**/*.test.ts --node-ipc --recursive --require mocha-suppress-logs",
 		"test:semanticTokens": "mocha test/LanguageServer/SemanticTokens/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
 		"test:onDefinition": "mocha test/LanguageServer/onDefinition/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
-		"test:onReferences": "mocha test/LanguageServer/onReferences/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs"
+		"test:onReferences": "mocha test/LanguageServer/onReferences/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
+		"test:validateTextDocument": "mocha test/LanguageServer/validateTextDocument/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs"
+
 	},
 	"devDependencies": {
 		"@types/sinon": "^17.0.3",

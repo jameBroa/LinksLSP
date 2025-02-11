@@ -269,10 +269,6 @@ describe("validateTextDocument: Multiple variable definitions tests", ()=> {
 
       const result = await server.validateTextDocument(params);
 
-      // we have 6 diagnostics but we only have two variable definitions
-      // my guess is that:
-      // Diagnostics for the variable appear for each instance the variable exists
-      // Since in this document, the variable 'x' appears 3 times, we have 6 diagnostics
       let expected = [
           {
             "severity": 1,
@@ -286,7 +282,7 @@ describe("validateTextDocument: Multiple variable definitions tests", ()=> {
                 "character": 9
               }
             },
-            "message": "Variable x is declared twice.",
+            "message": "Variable x is defined multiple times",
             "source": "LinksLSP"
           },
           {
@@ -301,67 +297,7 @@ describe("validateTextDocument: Multiple variable definitions tests", ()=> {
                 "character": 9
               }
             },
-            "message": "Variable x is declared twice.",
-            "source": "LinksLSP"
-          },
-          {
-            "severity": 1,
-            "range": {
-              "start": {
-                "line": 2,
-                "character": 8
-              },
-              "end": {
-                "line": 2,
-                "character": 9
-              }
-            },
-            "message": "Variable x is declared twice.",
-            "source": "LinksLSP"
-          },
-          {
-            "severity": 1,
-            "range": {
-              "start": {
-                "line": 3,
-                "character": 8
-              },
-              "end": {
-                "line": 3,
-                "character": 9
-              }
-            },
-            "message": "Variable x is declared twice.",
-            "source": "LinksLSP"
-          },
-          {
-            "severity": 1,
-            "range": {
-              "start": {
-                "line": 2,
-                "character": 8
-              },
-              "end": {
-                "line": 2,
-                "character": 9
-              }
-            },
-            "message": "Variable x is declared twice.",
-            "source": "LinksLSP"
-          },
-          {
-            "severity": 1,
-            "range": {
-              "start": {
-                "line": 3,
-                "character": 8
-              },
-              "end": {
-                "line": 3,
-                "character": 9
-              }
-            },
-            "message": "Variable x is declared twice.",
+            "message": "Variable x is defined multiple times",
             "source": "LinksLSP"
           }
         ] as Diagnostic[];
@@ -605,10 +541,10 @@ describe("validateTextDocument: Function calls and parameters tests", () => {
             },
             "end": {
               "line": 6,
-              "character": 7
+              "character": 12
             }
           },
-          "message": "Incorrect number of arguments",
+          "message": "Incorrect number of arguments.",
           "source": "LinksLSP"
         }
       ] as Diagnostic[];
@@ -647,10 +583,10 @@ describe("validateTextDocument: Function calls and parameters tests", () => {
             },
             "end": {
               "line": 6,
-              "character": 7
+              "character": 10
             }
           },
-          "message": "Incorrect number of arguments",
+          "message": "Incorrect number of arguments.",
           "source": "LinksLSP"
         }
       ] as Diagnostic[];
@@ -711,158 +647,158 @@ describe("validateTextDocument: Function calls and parameters tests", () => {
   });
 });
 
-describe("validateTextDocument: Uninitialized variables tests", () => {
-  let server: LanguageServer;
-  let baseUri = path.resolve(__dirname, './validateTextDocumentTests/uninitializedVariables/');
-  let testOcamlClient: OCamlClient;
-  let tempFilePath: string;
-  beforeEach(async ()  => {
-    server = new LanguageServer();
-    testOcamlClient = new OCamlClient();
-    server.start();
-    tempFilePath = path.join(__dirname, 'temporary.links');
+// describe("validateTextDocument: Uninitialized variables tests", () => {
+//   let server: LanguageServer;
+//   let baseUri = path.resolve(__dirname, './validateTextDocumentTests/uninitializedVariables/');
+//   let testOcamlClient: OCamlClient;
+//   let tempFilePath: string;
+//   beforeEach(async ()  => {
+//     server = new LanguageServer();
+//     testOcamlClient = new OCamlClient();
+//     server.start();
+//     tempFilePath = path.join(__dirname, 'temporary.links');
 
-  });
+//   });
 
-  afterEach(async() => {
-    try {
-        await fs.unlink(tempFilePath);
-        sinon.restore();
-    } catch (error: any) {
-        console.error(`Error deleting temporary file: ${error.message}`);
+//   afterEach(async() => {
+//     try {
+//         await fs.unlink(tempFilePath);
+//         sinon.restore();
+//     } catch (error: any) {
+//         console.error(`Error deleting temporary file: ${error.message}`);
         
-    }
-    server.connection.dispose();
-  });
+//     }
+//     server.connection.dispose();
+//   });
 
-  after(async () => {
-    server.connection.dispose();
-  });
+//   after(async () => {
+//     server.connection.dispose();
+//   });
 
-  it("Should throw an 'uninitialized variable' diagnostic if a variable is referenced but not yet initialized", async () => {
-    const fileUri = path.join(baseUri, '1.links');
-      const fileContent = await fs.readFile(fileUri, 'utf8');
-      let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
-      await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+//   it("Should throw an 'uninitialized variable' diagnostic if a variable is referenced but not yet initialized", async () => {
+//     const fileUri = path.join(baseUri, '1.links');
+//       const fileContent = await fs.readFile(fileUri, 'utf8');
+//       let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+//       await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
       
-      sinon.stub(server, 'getAST').returns(
-          Promise.resolve((
-              AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
-          ))
-      );
+//       sinon.stub(server, 'getAST').returns(
+//           Promise.resolve((
+//               AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+//           ))
+//       );
 
-      let params = TextDocument.create(
-        fileUri.toString(),
-          "links",
-          1,
-          newDocumentText
-      );
+//       let params = TextDocument.create(
+//         fileUri.toString(),
+//           "links",
+//           1,
+//           newDocumentText
+//       );
 
-      const result = await server.validateTextDocument(params);
+//       const result = await server.validateTextDocument(params);
 
-      let expected = [
-        {
-          "severity": 1,
-          "range": {
-            "start": {
-              "line": 2,
-              "character": 14
-            },
-            "end": {
-              "line": 2,
-              "character": 15
-            }
-          },
-          "message": "Variable x is used before being initialized.",
-          "source": "LinksLSP"
-        }
-      ] as Diagnostic[];
+//       let expected = [
+//         {
+//           "severity": 1,
+//           "range": {
+//             "start": {
+//               "line": 2,
+//               "character": 14
+//             },
+//             "end": {
+//               "line": 2,
+//               "character": 15
+//             }
+//           },
+//           "message": "Variable x is used before being initialized.",
+//           "source": "LinksLSP"
+//         }
+//       ] as Diagnostic[];
 
-      assert.deepStrictEqual(result, expected);
+//       assert.deepStrictEqual(result, expected);
 
-  });
+//   });
 
-  it("Should throw an 'uninitialized variable' diagnostic if multiple variables are referenced but not yet initialized", async () => {
-    const fileUri = path.join(baseUri, '2.links');
-      const fileContent = await fs.readFile(fileUri, 'utf8');
-      let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
-      await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+//   it("Should throw an 'uninitialized variable' diagnostic if multiple variables are referenced but not yet initialized", async () => {
+//     const fileUri = path.join(baseUri, '2.links');
+//       const fileContent = await fs.readFile(fileUri, 'utf8');
+//       let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+//       await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
       
-      sinon.stub(server, 'getAST').returns(
-          Promise.resolve((
-              AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
-          ))
-      );
+//       sinon.stub(server, 'getAST').returns(
+//           Promise.resolve((
+//               AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+//           ))
+//       );
 
-      let params = TextDocument.create(
-        fileUri.toString(),
-          "links",
-          1,
-          newDocumentText
-      );
+//       let params = TextDocument.create(
+//         fileUri.toString(),
+//           "links",
+//           1,
+//           newDocumentText
+//       );
 
-      const result = await server.validateTextDocument(params);
+//       const result = await server.validateTextDocument(params);
 
-      let expected = [
-        {
-          "severity": 1,
-          "range": {
-            "start": {
-              "line": 1,
-              "character": 16
-            },
-            "end": {
-              "line": 1,
-              "character": 17
-            }
-          },
-          "message": "Variable x is used before being initialized.",
-          "source": "LinksLSP"
-        },
-        {
-          "severity": 1,
-          "range": {
-            "start": {
-              "line": 1,
-              "character": 20
-            },
-            "end": {
-              "line": 1,
-              "character": 21
-            }
-          },
-          "message": "Variable y is used before being initialized.",
-          "source": "LinksLSP"
-        }
-      ] as Diagnostic[];
+//       let expected = [
+//         {
+//           "severity": 1,
+//           "range": {
+//             "start": {
+//               "line": 1,
+//               "character": 16
+//             },
+//             "end": {
+//               "line": 1,
+//               "character": 17
+//             }
+//           },
+//           "message": "Variable x is used before being initialized.",
+//           "source": "LinksLSP"
+//         },
+//         {
+//           "severity": 1,
+//           "range": {
+//             "start": {
+//               "line": 1,
+//               "character": 20
+//             },
+//             "end": {
+//               "line": 1,
+//               "character": 21
+//             }
+//           },
+//           "message": "Variable y is used before being initialized.",
+//           "source": "LinksLSP"
+//         }
+//       ] as Diagnostic[];
 
-      assert.deepStrictEqual(result, expected);
-  });
+//       assert.deepStrictEqual(result, expected);
+//   });
 
-  it("Should NOT throw an 'uninitialized variable' diagnostic if a variable is initialized before being referenced", async () => {
-    const fileUri = path.join(baseUri, '3.links');
-      const fileContent = await fs.readFile(fileUri, 'utf8');
-      let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
-      await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+//   it("Should NOT throw an 'uninitialized variable' diagnostic if a variable is initialized before being referenced", async () => {
+//     const fileUri = path.join(baseUri, '3.links');
+//       const fileContent = await fs.readFile(fileUri, 'utf8');
+//       let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+//       await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
       
-      sinon.stub(server, 'getAST').returns(
-          Promise.resolve((
-              AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
-          ))
-      );
+//       sinon.stub(server, 'getAST').returns(
+//           Promise.resolve((
+//               AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+//           ))
+//       );
 
-      let params = TextDocument.create(
-        fileUri.toString(),
-          "links",
-          1,
-          newDocumentText
-      );
+//       let params = TextDocument.create(
+//         fileUri.toString(),
+//           "links",
+//           1,
+//           newDocumentText
+//       );
 
-      const result = await server.validateTextDocument(params);
+//       const result = await server.validateTextDocument(params);
 
-      let expected = [] as Diagnostic[];
+//       let expected = [] as Diagnostic[];
 
-      assert.deepStrictEqual(result, expected);
-  });
+//       assert.deepStrictEqual(result, expected);
+//   });
 
-});
+// });

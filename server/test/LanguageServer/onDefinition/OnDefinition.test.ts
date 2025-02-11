@@ -41,7 +41,7 @@ describe("OnDefinition: Function tests", ()=> {
             '1.links', 
             Position.create(10, 22)
         );
-        const expected = Range.create(4,4,4,4);
+        const expected = Range.create(4,0,6,1);
         assert.deepStrictEqual(result, expected);
     });
 
@@ -54,7 +54,7 @@ describe("OnDefinition: Function tests", ()=> {
             '3.links', 
             Position.create(13, 16)
         );
-        const expected = Range.create(1, 4, 1, 4);
+        const expected = Range.create(1, 0, 10, 1);
         assert.deepStrictEqual(result, expected);
     });
 
@@ -67,8 +67,46 @@ describe("OnDefinition: Function tests", ()=> {
             '4.links', 
             Position.create(8, 7)
         );
-        const expected = Range.create(2, 8, 2, 8);
+        const expected = Range.create(2, 4, 7, 5);
         assert.deepStrictEqual(result, expected);
+    });
+
+    it('Should return a null location for a function that is not yet defined', async () => {
+        const result = await RunOnDefinitionTest(
+            baseUri, 
+            tempFilePath, 
+            server, 
+            testOcamlClient, 
+            '8.links', 
+            Position.create(3, 10)
+        );
+        assert.deepStrictEqual(result, null);
+    });
+
+    it("Should return the same location (leading to references) if definition called on the function definition", async () => {
+        const result = await RunOnDefinitionTest(
+            baseUri, 
+            tempFilePath, 
+            server, 
+            testOcamlClient, 
+            '9.links', 
+            Position.create(2, 10)
+        );
+        const expected = Range.create(2, 4, 4, 5);
+        assert.deepStrictEqual(result, expected);
+    });
+
+    it("Should return null to a function reference if its definitions exists earlier and out of scope", async () => {
+        const result = await RunOnDefinitionTest(
+            baseUri, 
+            tempFilePath, 
+            server, 
+            testOcamlClient, 
+            '9.links', 
+            Position.create(9, 11)
+        );
+        // const expected = Range.create//(2, 4, 4, 5);
+        assert.deepStrictEqual(result, null);
     });
 });
 
@@ -156,6 +194,43 @@ describe("OnDefinition: Variable tests", async () => {
         );
         const expected = Range.create(1, 12, 1, 13);
         assert.deepStrictEqual(result, expected);
+    });
+
+    it("Should return a null location for a variable thats not yet defined", async () => {
+        const result = await RunOnDefinitionTest(
+            baseUri, 
+            tempFilePath, 
+            server, 
+            testOcamlClient, 
+            '7.links', 
+            Position.create(3, 9)
+        );
+        assert.deepStrictEqual(result, null);
+    });
+
+    it("Should return the same position if definition called on the variable definition", async () => {
+        const result = await RunOnDefinitionTest(
+            baseUri, 
+            tempFilePath, 
+            server, 
+            testOcamlClient, 
+            '10.links', 
+            Position.create(2, 9)
+        );
+        const expected = Range.create(2,8,2,9);
+        assert.deepStrictEqual(result, expected);
+    });
+
+    it("Should return the same position if definition called on the variable definition", async () => {
+        const result = await RunOnDefinitionTest(
+            baseUri, 
+            tempFilePath, 
+            server, 
+            testOcamlClient, 
+            '11.links', 
+            Position.create(6, 4)
+        );
+        assert.deepStrictEqual(result, null);
     });
 
 

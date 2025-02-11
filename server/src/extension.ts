@@ -45,6 +45,9 @@ import { DocumentManipulator } from './common/document/document';
 import * as lodash from 'lodash';
 import { Mutex } from 'async-mutex';
 import { LinksParserConstants } from './common/constants';
+import { isConstTypeReference } from 'typescript';
+import {LinksNode } from './common/ast/node';
+import { RangeReplacer } from './common/ast/namespaces/range';
 
 // Problem: How do we implement the GlobalLogger if we can't export it since we need to pass the connection variable
 // Solution: n/a
@@ -52,6 +55,15 @@ import { LinksParserConstants } from './common/constants';
 // Note: Do we need to solve it? console.log works as expected now so there shouldn't be a need for GlobalLogger...
 
 // export const GlobalLogger = new LinksLSPLogger();
+
+enum ENV_MODE{
+  FAST  = "FAST",
+  SLOW = "SLOW"
+}
+
+const env = ENV_MODE.FAST;
+
+
 interface ExampleSettings {
   maxNumberOfProblems: number;
 }
@@ -229,24 +241,31 @@ export class LanguageServer {
       params.position.line+2, params.position.character
     );
 
-
-
-    // const referenceNode = AST.findNodeAtPosition(ast, position);
     const referenceNode = AST.getClosestNodeFromAST(ast, position);
-    // console.log(`test ref node: ${JSON.stringify(testRefNode, AST.removeParentAndChildren, 2)}`);
+  
+    const node = new LinksNode(ast.children![0], params.textDocument.uri);
 
-
-
-
-    if(!referenceNode){
+    if(referenceNode === null){
       console.log("[LanguageServer.OnReferences] Could not find node at cursor position");
       return [];
     }
 
+    let LinksNodeReferences = node.GetReferences(referenceNode);
+    for(let ref of LinksNodeReferences) {
+      ref.range = RangeReplacer.AdjustRangeAsRange(ref.range);
+    }
     console.log(`[LanguageServer.OnReferences] referenceNode: ${JSON.stringify(referenceNode, AST.removeParentField, 2)}`);
     let valid_references: Location[] = [];
     if(!referenceNode.parent) {
       return [];
+    }
+
+    if(env === ENV_MODE.FAST) {
+      console.log(`[LanguageServer.OnReferences] Fast mode`);
+      console.log(`[Fast Result]: ${JSON.stringify(LinksNodeReferences, AST.removeParentAndChildren, 2)}`);
+      node.PrintAllFunVarRefNDef();
+
+      return LinksNodeReferences;
     }
     
     if(referenceNode.value === "No signature" || referenceNode.value === "Signature") {
@@ -297,7 +316,9 @@ export class LanguageServer {
         );
       });
 
-      console.log(`function references: ${JSON.stringify(ret, null, 2)}`);
+      console.log(`function references (old): ${JSON.stringify(ret, null, 2)}`);
+      console.log(`function references (new): ${JSON.stringify(LinksNodeReferences, null, 2)}`);
+
       return ret;
     } else {
       // Do Variable reference
@@ -351,7 +372,9 @@ export class LanguageServer {
           )
         );
       });
-      console.log(`[LanguageServer.OnReferences] ret: ${JSON.stringify(ret, null, 2)}`);
+      console.log(`[LanguageServer.OnReferences] ret (old): ${JSON.stringify(ret, null, 2)}`);
+      console.log(`[LanguageServer.OnReferences] References (new): ${JSON.stringify(LinksNodeReferences, null, 2)}`);
+
       return ret;
     }
   }
@@ -392,26 +415,18 @@ export class LanguageServer {
         return null;
     }    
 
-    console.log("URI: ", uri.textDocument.uri)
-
-
     // Wrap with dummy function
 
     // Get the in-memory content of the document
     const documentContent = document.getText();
-    console.log(`[LanguageServer.getAST] documentContent: ${documentContent}`);
     const newDocumentContent = `fun dummy_wrapper(){\n${documentContent}\n}`;
-    console.log(`[LanguageServer.getAST] newDocumentContent: ${newDocumentContent}`);
     // Define a path for the temporary file
     const tempFilePath =  path.join(__dirname, 'temporary.links');
-    console.log("tempfilepath: ", tempFilePath);
     await fs.writeFile(tempFilePath, newDocumentContent, 'utf8');
     // this.documentsMap.set(uri.textDocument.uri, newDocumentContent);
 
     try {
       await fs.writeFile(tempFilePath, newDocumentContent, 'utf8');
-      console.log(`[getASTFromText] Temporary file written: ${tempFilePath}`);
-      console.log(`[getASTFromText] Content: ${newDocumentContent}`);
 
       let AST_as_json: string | null = null;
       let attempts = 0;
@@ -419,12 +434,10 @@ export class LanguageServer {
 
       while (attempts < maxAttempts) {
           AST_as_json = await this.ocamlClient.get_AST_as_JSON(`${tempFilePath}\n`);
-          console.log(`[getASTFromText] AST as JSON: ${AST_as_json}`);
 
           if (AST_as_json && this.isValidJSON(AST_as_json)) {
               break;
           }
-
           console.warn(`[getASTFromText] Invalid or incomplete JSON received. Retrying... (${attempts + 1}/${maxAttempts})`);
           attempts++;
           await lodash.delay(() => {}, 500); // Wait for 500ms before retrying
@@ -489,9 +502,8 @@ export class LanguageServer {
       return null;
     }
 
-
     console.log(`user position: ${JSON.stringify(params.position, null, 2)}`);
-
+    console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
     const referenceNode = AST.findNodeAtPosition(
       ast, 
       Position.create(
@@ -500,20 +512,32 @@ export class LanguageServer {
       )
     );
 
+    const node = new LinksNode(ast.children![0], params.textDocument.uri);
+    node.PrintAllFunVarRefNDef();
+    let definition: Location | null = null;
+    if(referenceNode !== null) {
 
-    // const referenceNodeAlt = AST.findAltNodeAtPosition(ast, 
-    //   Position.create(
-    //     params.position.line+2,
-    //     params.position.character
-    //   )
-    // );
+      console.log(`referenceNode: ${JSON.stringify(referenceNode, AST.removeParentAndChildren, 2)}`);
 
-    console.log(`[LanguageServer.onDefinition] referenceNode: ${JSON.stringify(referenceNode, AST.removeParentField, 2)}`);
 
-    if (!referenceNode) {
-      console.log("[LanguageServer.onDefinition] Could not find node at cursor position");
+      definition = node.GetDefinition(referenceNode, params.textDocument.uri);
+      if(definition === null){
+        return null;
+      }
+      definition = RangeReplacer.AdjustRangeAsLocation(definition);
+    } else {
       return null;
     }
+
+    if(env === ENV_MODE.FAST) {
+      console.log(`[Returning FAST OnDefinition!]`);
+      console.log(`[Fast Result]: ${JSON.stringify(definition, AST.removeParentAndChildren, 2)}`);
+      return definition;
+    }
+
+    
+    
+
 
     if(
       referenceNode.parent && 
@@ -551,7 +575,9 @@ export class LanguageServer {
           )
         );
       } 
-      // console.log(`[LanguageServer.onDefinition] functionDefinition: ${JSON.stringify(ret, null, 2)}`);
+      console.log(`[LanguageServer.onDefinition] result (old): ${JSON.stringify(ret, null, 2)}`);
+      console.log(`[LanguageServer.onDefinition] result (new): ${JSON.stringify(definition, null, 2)}`);
+
       return ret;
     } else {
       // OnDefinition for variable
@@ -582,7 +608,8 @@ export class LanguageServer {
             Position.create(definitionNode.range.end.line-2, definitionNode.range.end.character-1)
           )
         );
-        console.log("definition pos", JSON.stringify(ret, null, 2));
+        console.log("[OnDefinition old]", JSON.stringify(ret, null, 2));
+        console.log("[OnDefinition new] ", JSON.stringify(definition, null, 2));
         return ret;
       }
 
@@ -746,11 +773,9 @@ export class LanguageServer {
     let ast: AST.ASTNode | null;
     if(this.documentsMap.has(textDocument.uri)) {
       // map is only setup when the doc changes
-      console.log("[validateTextDocument] Getting AST from map");
       ast = await this.getASTFromText(this.documentsMap.get(textDocument.uri)!);
     } else {
       // this is for when the file is first loaded
-      console.log("[validateTextDocument] Getting AST from file itself");
       let payload = {
         textDocument: {
           uri: textDocument.uri
@@ -765,188 +790,22 @@ export class LanguageServer {
     if(!ast || ast === null) {
       return [];
     }
+
+    const node = new LinksNode(ast.children![0], textDocument.uri); 
+    const LinksNodeDiagnostics = node.GetDiagnostics(this.hasDiagnosticRelatedInformationCapability);
+    node.PrintAllFunVarRefNDef();
+    console.log(`AST: ${JSON.stringify(ast, AST.removeParentField, 2)}`)
+    // if(env === ENV_MODE.FAST){
+    //   console.log(`[ValidateTextDocument] Finishing FAST!`);
+    //   this.connection.sendDiagnostics({
+    //     uri:textDocument.uri, 
+    //     diagnostics: LinksNodeDiagnostics
+    //   });
+    //   console.log(`All diagnostics: ${JSON.stringify(LinksNodeDiagnostics, AST.removeParentAndChildren, 2)}`);
+    //   return LinksNodeDiagnostics;
+    // }
+
     let diagnostics: Diagnostic[] = [];
- 
-    // let undefinedVariables: AST.ASTNode[] = [];
-    // let duplicateDeclarations: AST.ASTNode[] = [];
-    // let uninitializedVariables: AST.ASTNode[] = [];
-    // let undefinedFunctions: AST.ASTNode[] = [];
-
-
-    // type DiagnosticIncorrParam = {
-    //   node: AST.ASTNode,
-    //   actualNumCount: number,
-    //   expectedNumCount: number,
-    // }
-
-    // let incorrectParamNumber: Map<Range, DiagnosticIncorrParam> = new Map();
-
-    // // SHOULD ONLY ACCEPT ASTNode's of type Fun
-    // function processFunction(
-    //   local_ast: AST.ASTNode, 
-    //   parentVariableDefinitions: Map<string, AST.ASTNode[]>) 
-    //   {
-      
-    //   const functionName = AST.functionParser.getName(local_ast);
-    //   // console.log("[processFunction] functionName: ", functionName);
-
-    //   let localVariableDefinitions: Map<string, AST.ASTNode[]> = AST.variableParser.getVariableDefinitionsFromAST(local_ast);
-    //   let localVariableReferences: AST.ASTNode[] = AST.variableParser.getVariableReferencesFromAST(local_ast);
-    //   let localFunctionalVariableDefinitions: Map<string, [AST.ASTNode[], Range[]]> = AST.variableParser.getFunctionalVariableDefinitionsFromAST(local_ast);
-      
-    //   // console.log(`[processFunction] localFunctionalVariableDefinitions`);
-    //   for(const key of localFunctionalVariableDefinitions.keys()){
-    //     // console.log(JSON.stringify(localFunctionalVariableDefinitions.get(key), AST.removeParentField, 2));
-    //   }
-
-    //   let localFunctionReferences: AST.ASTNode[] = AST.functionParser.getFunctionReferencesFromAST(local_ast);
-    //   // console.log(`[processFunction] localFunctionReferences: ${JSON.stringify(localFunctionReferences, AST.removeParentField, 2)}`);
-      
-    //   let allVariableDefinitions: Map<string, AST.ASTNode[]> = new Map([...localVariableDefinitions, ...parentVariableDefinitions]);
-
-    //   for(const varName of Array.from(allVariableDefinitions.keys())) {
-    //     // console.log(`all variables definitions for ${varName}`);
-    //     // console.log(`[ASTNode]: ${JSON.stringify(allVariableDefinitions.get(varName), AST.removeParentField, 2)}`);
-    //   }
-
-
-
-    //   function isValid(node: AST.ASTNode, varName: string){
-    //     let res = localFunctionalVariableDefinitions.get(varName)!;
-    //     let results: boolean[] = [];
-    //     if(res){
-    //       for(let i = 0; i < res[0].length; i++){
-    //         if(AST.isBefore(res[1][i], node.range)){
-    //           results.push(false);
-    //         } else {
-    //           results.push(true);
-    //         }
-    //       }
-         
-    //     return results.includes(true);
-    //     }
-    //   }
-
-    //   for(const node of localVariableReferences){
-    //     const variableName = node.value.split(" ")[1];
-        
-    //     // Undefined variables
-    //     if (
-    //       !allVariableDefinitions.has(variableName) &&
-    //       !isValid(node, variableName)
-        
-    //     ){
-    //       undefinedVariables.push(node);
-    //     }
-
-    //     // Uninitialized variables
-    //     if(
-    //       allVariableDefinitions.has(variableName) &&
-    //       // AST.isBefore(allVariableDefinitions.get(variableName)![0].range, node.range)
-    //       AST.isBefore(node.range, allVariableDefinitions.get(variableName)![0].range)
-    //       )
-        
-    //       {
-    //         uninitializedVariables.push(node);
-    //     }
-
-    //     // Duplicate declarations
-    //     for(const varDef of allVariableDefinitions.keys()){
-    //       if(allVariableDefinitions.get(varDef)!.length > 1){
-    //         duplicateDeclarations = [...duplicateDeclarations, ...allVariableDefinitions.get(varDef)!];
-    //       }
-    //     }
-    //   }
-
-    //   for(const node of localFunctionReferences) {
-    //     let currfunctionName = AST.functionParser.getFunctionNameFromFnAppl(node);
-
-    //     const availableFunctions: Set<string> = AST.functionParser.getAvailableFunctionsToCall(node);
-    //     // availableFunctions.add(currfunctionName);
-    //     availableFunctions.add(AST.functionParser.getName(local_ast));
-    //     // console.log(Array.from(availableFunctions), `Available functions where ${currfunctionName}() is at line ${node.range.start.line}`);
-
-    //     // Undefined functions
-    //     if(!availableFunctions.has(currfunctionName) && !LinksParserConstants.LINKS_FUNCS.has(currfunctionName)){
-    //       undefinedFunctions.push(node);
-    //     }
-    //   }
-
-    //   // Function call parameter count
-    //   let numParams = AST.functionParser.getFunctionParams(local_ast).length;
-    //   let allFunctionCalls: AST.ASTNode[] = AST.functionParser.getFunctionCallsAsAST(ast!, functionName);
-
-    //   for(const calls of allFunctionCalls){
-    //     let currParams = calls.children!.slice(1).length;
-    //     if(currParams !== numParams){
-    //       incorrectParamNumber.set( 
-    //         calls.children![0].range, 
-    //         {
-    //           node: calls.children![0],
-    //           actualNumCount: currParams,
-    //           expectedNumCount: numParams
-    //         }
-    //     ); 
-    //     }
-    //   }
-
-    //   let nestedFunctions: AST.ASTNode[] = AST.functionParser.getNextLevelFunctions(local_ast);
-    //   // console.log(`<--- End of ${functionName} --->`);
-    //   for(const nestedFunction of nestedFunctions){
-    //     processFunction(nestedFunction, allVariableDefinitions);
-    //   }
-    // }
-
-    // // Since we wrap the entire code in a dummy function, the first child of the AST is of value "Fun"
-    // let startNode = ast!.children![0];
-    // // processFunction(startNode, new Map());
-
-   
-
-    // type DiagnosticInfo = {
-    //   node: AST.ASTNode,
-    //   firstMessage: string,
-    //   secondMessage: string
-    // }
-
-    // // let allDiagnostics: DiagnosticInfo[] = [
-    //   ...undefinedVariables.map(varNode => (
-    //     {
-    //       node: varNode, 
-    //       firstMessage: `Variable ${varNode.value.split(" ")[1]} is not defined`,
-    //       secondMessage:`Consider defining ${varNode.value.split(" ")[1]} before using it`
-    //     } as DiagnosticInfo
-    //   )),
-    //   ...undefinedFunctions.map(fun => (
-    //     {
-    //       node: fun, 
-    //       firstMessage: `Function ${AST.functionParser.getFunctionNameFromFnAppl(fun)} is not defined`,
-    //       secondMessage:`Consider defining "${AST.functionParser.getFunctionNameFromFnAppl(fun)}" before using it`
-    //     } as DiagnosticInfo
-    //   )),
-    //   ...duplicateDeclarations.map(dup => (
-    //     {
-    //       node: dup,
-    //       firstMessage: `Variable ${dup.value.split(" ")[1]} is declared twice.`,
-    //       secondMessage: `Either remove one declaration or reuse the variable.`
-    //     }
-    //   )),
-    //   ...uninitializedVariables.map(uninit => (
-    //     {
-    //       node: uninit,
-    //       firstMessage: `Variable ${uninit.value.split(" ")[1]} is used before being initialized.`,
-    //       secondMessage: `Consider initializing ${uninit.value.split(" ")[1]} before using it.`
-    //     }
-    //   )),
-    //   ...Array.from(incorrectParamNumber.values()).map(incorr => (
-    //     {
-    //       node: incorr.node,
-    //       firstMessage: `Incorrect number of arguments`,
-    //       secondMessage: `Expected ${incorr.expectedNumCount} arguments, but got ${incorr.actualNumCount}.`
-    //     }
-    //   ))
-    // ];
-
 
     let allDiagnostics = AST.ProcessAST(ast);
 
@@ -972,6 +831,7 @@ export class LanguageServer {
         message: currDiagnostic.firstMessage,
         source: 'LinksLSP'
       };
+
       if (this.hasDiagnosticRelatedInformationCapability) {
         diagnostic.relatedInformation = [
           {
@@ -985,9 +845,11 @@ export class LanguageServer {
       }
       diagnostics.push(diagnostic);
     }
-    this.connection.sendDiagnostics({uri:textDocument.uri, diagnostics});
-    // console.log(JSON.stringify(diagnostics, null, 2), "DIAGNOSTICS");
-    return diagnostics;
+    this.connection.sendDiagnostics({uri:textDocument.uri, diagnostics:LinksNodeDiagnostics});
+    console.log(`Diagnostics (old): ${JSON.stringify(diagnostics, AST.removeParentAndChildren, 2)}`);
+    console.log(`Diagnostics (new): ${JSON.stringify(LinksNodeDiagnostics, AST.removeParentAndChildren, 2)}`);
+
+    return LinksNodeDiagnostics;
   }
   private onDidClose(e: any) {
     // For now, e:any
@@ -1088,22 +950,13 @@ export class LanguageServer {
       documentText = temp!.getText();
     }
 
-    
-
-
 
     if(!ast){
       console.log("[OnRequestFull] Couldn't get AST");
       return;
     }
 
-    // console.log(`DOING SEMANTIC BUILDING!!!!!`);
-
     let builder = new SemanticTokensBuilder();
-
-    console.log("[AST]", JSON.stringify(ast, AST.removeParentField, 2));
-
-
 
     // ##################### VARIABLES #####################
     const all_vars: AST.ASTNode[] = AST.getAllVariables(ast);
@@ -1113,7 +966,7 @@ export class LanguageServer {
       && node.value.substring(0, 37) !== "Constant: (CommonTypes.Constant.Float" &&
       node.value.substring(0, 38) !== "Constant: (CommonTypes.Constant.String";
     });
-
+    
     let unused_variables = AST.variableParser.extractUnusedVariables(all_vars_no_cons);
     console.log(`[unused variables]: ${JSON.stringify(unused_variables, AST.removeParentField, 2)}`);
     let unused_variables_set = new Set(unused_variables);
@@ -1130,6 +983,7 @@ export class LanguageServer {
     let string_constants = all_vars.filter((node) => {
       return node.value.substring(0, 38) === "Constant: (CommonTypes.Constant.String";
     });
+
 
     let projections = AST.variableParser.extractProjectionsFromAST(ast);
     // ##################### ######### #####################
@@ -1150,9 +1004,10 @@ export class LanguageServer {
     // let functionDefinitions = AST.functionParser.extractFunctionDefinitions(ast);
     // functionDefinitions: ASTNodes of type "Fun"
     let funNodes: AST.ASTNode[] = AST.functionParser.getFunctionFromAST(ast);
+
+
     let functionDefinitions: AST.ASTNode[] = [];
 
-    // console.log("funNodes", JSON.stringify(funNodes, AST.removeParentField, 2)); 
 
     try{
     for(const node of funNodes) {
@@ -1187,10 +1042,9 @@ export class LanguageServer {
     console.log("failed to adjust functionDefinitions", e);
   }
      
-    // console.log("adjusted funNodes", JSON.stringify(functionDefinitions, AST.removeParentAndChildren, 2));
-
     // functionCalls: an array of strings which are just the function calls in a doc.
     let functionCalls: string[] = AST.functionParser.extractFunctionCalls(ast);
+    console.log(`functionCalls: ${JSON.stringify(functionCalls, null, 2)}`);
     // functionCallsMap is just a Map between function name and the number of times it is called
     let functionCallsMap: Map<string, number> = AST.functionParser.createFunctionToNumCallsMap(functionCalls);
     // functionCallers: the actual ASTNodes of the function calls (not FnAppl but the "Variable: {funName}")
@@ -1215,18 +1069,19 @@ export class LanguageServer {
       });
     }
 
+
     // console.log("unusedFunctions", JSON.stringify(unusedFunctions, AST.removeParentField, 2));
     // console.log("usedFunctions", JSON.stringify(usedFunctions, AST.removeParentField, 2));
     
     // ##################### ######### #####################
 
- 
+
     const document = this.documents.get(params.textDocument.uri);
     if(!document){
       return null;
     } 
 
-
+    console.log("starting xml");
     // ##################### XML #####################
 
     let xml_semantics;
@@ -1254,6 +1109,9 @@ export class LanguageServer {
     });
     // ##################### ######### #####################
 
+    console.log(`used variables: ${JSON.stringify(used_variables, AST.removeParentAndChildren, 2)}`);
+    console.log(`!!!!!!unused functions: ${JSON.stringify(unusedFunctions, AST.removeParentAndChildren, 2)}`);
+
 
   const all_tokens = [
       ...used_variables.map(node => ({node, type: 8})),
@@ -1267,7 +1125,6 @@ export class LanguageServer {
       ...unusedFunctions.map(node => (({node, type: 27}))),
       ...usedFunctions.map(node => ({node, type: 28})),
       ...functionCallers.map(node => ({node, type: 28})),
-
   ].sort((a, b) => {
       if (!a.node.range || !b.node.range) {
         return 0;
@@ -1277,6 +1134,36 @@ export class LanguageServer {
       }
       return a.node.range.start.character - b.node.range.start.character;
   });
+
+  // (1) identify all XML ranges
+  // (2) For each XML range, perform Regex to make sure token ranges are correct
+  const XMLRanges = AST.xmlParser.extractXMLRanges(ast);
+
+  for(let node of all_tokens){
+    let is_inside_xml = false;
+    for(const range of XMLRanges){
+      if(AST.isInRange(node.node.range, range)){
+        is_inside_xml = true;
+        break;
+      }
+    }
+    if(
+      is_inside_xml === true && 
+      node.type !== 23 &&
+      node.type !== 24 &&
+      node.type !== 25
+    ){
+      console.log("Is inside XML, so calling adjust Ranges!");
+      console.log(`node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
+      node.node.range = AST.xmlParser.adjustRanges(node.node, documentText!, node.type);
+
+    } else {
+      continue;
+    }
+  }
+
+
+
 
   // Add to builder in sorted order
   for (const {node, type} of all_tokens) {

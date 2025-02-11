@@ -1,0 +1,11 @@
+
+fun test(){
+    fun inner(){
+        x 
+    }
+    var x = 10;
+    x+inner()
+}
+
+()
+# should return error if we call definition of variable x on line 4

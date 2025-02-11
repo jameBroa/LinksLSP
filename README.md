@@ -48,19 +48,16 @@ Calling out known issues can help limit users opening duplicate issues against y
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 11/09/25
+- Reworked the whole pipeline
+- Made it more efficient
+- Modularized code
+- Added more test cases
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+#### Known bugs in release
+- SemanticTokens don't always work
+- SemanticTokens not refactored to support new pipeline
+- XML SemanticToken tests fail
 
 ---
 

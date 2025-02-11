@@ -87,6 +87,10 @@ export namespace AST {
         let undefinedFunctions: ASTNode[] = [];
         let incorrectParamNumber: Map<Range, DiagnosticIncorrParam> = new Map();
 
+
+
+
+
         function processFunction(
               local_ast: AST.ASTNode, 
               parentVariableDefinitions: Map<string, ASTNode[]>) 
@@ -94,12 +98,14 @@ export namespace AST {
               
               const functionName = functionParser.getName(local_ast);
         
+              // Right here related to formlet variables and such...
               let localVariableDefinitions: Map<string, ASTNode[]> = variableParser.getVariableDefinitionsFromAST(local_ast);
               let localVariableReferences: ASTNode[] = variableParser.getVariableReferencesFromAST(local_ast);
               let localFunctionalVariableDefinitions: Map<string, [ASTNode[], Range[]]> = variableParser.getFunctionalVariableDefinitionsFromAST(local_ast);
               
         
               let localFunctionReferences: ASTNode[] = functionParser.getFunctionReferencesFromAST(local_ast);
+
               let allVariableDefinitions: Map<string, ASTNode[]> = new Map([...localVariableDefinitions, ...parentVariableDefinitions]);
         
 
@@ -118,6 +124,10 @@ export namespace AST {
                 return results.includes(true);
                 }
               }
+
+              function isFormletFunction(node: ASTNode){
+                return node.parent!.value ==="FormBinding";
+              }
         
               for(const node of localVariableReferences){
                 const variableName = node.value.split(" ")[1];
@@ -125,7 +135,8 @@ export namespace AST {
                 // Undefined variables
                 if (
                   !allVariableDefinitions.has(variableName) &&
-                  !isValid(node, variableName)
+                  !isValid(node, variableName) &&
+                  !isFormletFunction(node)
                 
                 ){
                   undefinedVariables.push(node);
@@ -150,9 +161,18 @@ export namespace AST {
                   }
                 }
               }
-        
+              
+              // Undefined functions
               for(const node of localFunctionReferences) {
-                let currfunctionName = functionParser.getFunctionNameFromFnAppl(node);
+                
+                let currfunctionName;
+                
+                if(node.value === "FnAppl"){
+                    currfunctionName = functionParser.getFunctionNameFromFnAppl(node);
+                } else {
+                    // Happens when we have formlets
+                    currfunctionName = variableParser.getName(node);
+                }                
         
                 const availableFunctions: Set<string> = functionParser.getAvailableFunctionsToCall(node);
                 availableFunctions.add(functionParser.getName(local_ast));
@@ -162,11 +182,11 @@ export namespace AST {
                   undefinedFunctions.push(node);
                 }
               }
+
         
               // Function call parameter count
               let numParams = functionParser.getFunctionParams(local_ast).length;
               let allFunctionCalls: ASTNode[] = functionParser.getFunctionCallsAsAST(ast!, functionName);
-        
               for(const calls of allFunctionCalls){
                 let currParams = calls.children!.slice(1).length;
                 if(currParams !== numParams){
@@ -182,6 +202,7 @@ export namespace AST {
               }
         
               let nestedFunctions: ASTNode[] = functionParser.getNextLevelFunctions(local_ast);
+
               for(const nestedFunction of nestedFunctions){
                 processFunction(nestedFunction, allVariableDefinitions);
               }
@@ -190,7 +211,10 @@ export namespace AST {
             // Since we wrap the entire code in a dummy function, the first child of the AST is of value "Fun"
             let startNode = ast!.children![0];
             processFunction(startNode, new Map());
-        
+            
+            console.log(`[ast.undefinedfunctions] ${JSON.stringify(undefinedFunctions, removeParentAndChildren, 2)}`)
+
+
             type DiagnosticInfo = {
                 node: AST.ASTNode,
                 firstMessage: string,
@@ -341,6 +365,9 @@ export namespace AST {
             }
         }
         traverse(ast);
+        if(ret.value === "Block"){
+            ret = ret.parent!.parent!.children![ret.parent!.parent!.children!.length-1]; //insane one liner
+        }
         return ret;
 
     }
@@ -580,12 +607,17 @@ export namespace AST {
 
         function traverse(currentNode: ASTNode): void {
             if(
-                (currentNode.type === "Leaf" && 
-                currentNode.value.substring(0, 9) === "Variable:") || 
-                (currentNode.type === "Leaf" && 
-                 currentNode.value.substring(0, 9) === "Constant:"   
-                )
+                ((
+                    currentNode.type === "Leaf" && 
+                    currentNode.value.substring(0, 9) === "Variable:"
+                ) || 
+                (
+                    currentNode.type === "Leaf" && 
+                    currentNode.value.substring(0, 9) === "Constant:"   
+                ))
+                
             ) {
+                console.log("adding variable");
                 all_nodes_value_variable.push(currentNode);
             }
             
@@ -599,37 +631,76 @@ export namespace AST {
         traverse(ast);
 
         let valid_nodes = all_nodes_value_variable.filter((elem) => (isRealVariable(elem)));
+        valid_nodes = valid_nodes.filter((elem) => {
+            return !(elem.parent!.value === "FormBinding" && elem.parent!.children![0] === elem);
+        });
 
         return valid_nodes;
     }
-
     export function isBefore(range1: Range, range2: Range): boolean {
-
         if (range1.end.line < range2.start.line) {
-          return true;
+            return true;
         }
         if (range1.end.line === range2.start.line && range1.end.character < range2.start.character) {
-          return true;
+            return true;
         }
         return false;
-      }
-      
-      export function isAfter(range1: Range, range2: Range): boolean {
+    }
+    
+    export function isAfter(range1: Range, range2: Range): boolean {
         if (range1.start.line > range2.end.line) {
-          return true;
+            return true;
         }
         if (range1.start.line === range2.end.line && range1.start.character > range2.end.character) {
-          return true;
+            return true;
         }
         return false;
-      }
-
-      function isInRange(range: Range, checkRange: Range): boolean {
-        if (isBefore(range, checkRange) || isAfter(range, checkRange)) {
-          return false;
+    }
+    
+    export function isInRange(range: Range, checkRange: Range): boolean {
+        if (
+            range.start.line < checkRange.start.line ||
+            (range.start.line === checkRange.start.line && range.start.character < checkRange.start.character)
+        ) {
+            return false;
+        }
+        if (
+            range.end.line > checkRange.end.line ||
+            (range.end.line === checkRange.end.line && range.end.character > checkRange.end.character)
+        ) {
+            return false;
         }
         return true;
-      }
+    }
+
+    // Old one below V. Above ^ is from ChatGPT
+    // export function isBefore(range1: Range, range2: Range): boolean {
+    //     if (range1.end.line < range2.start.line) {
+    //       return true;
+    //     }
+    //     if (range1.end.line === range2.start.line && range1.end.character < range2.start.character) {
+    //       return true;
+    //     }
+    //     return false;
+    //   }
+      
+    //   export function isAfter(range1: Range, range2: Range): boolean {
+    //     if (range1.start.line > range2.end.line) {
+    //       return true;
+    //     }
+    //     if (range1.start.line === range2.end.line && range1.start.character > range2.end.character) {
+    //       return true;
+    //     }
+    //     return false;
+    //   }
+
+    //   export function isInRange(range: Range, checkRange: Range): boolean {
+    //     if (isBefore(range, checkRange) || isAfter(range, checkRange)) {
+    //       return false;
+    //     }
+    //     return true;
+    //   }
+
 
      export function rangeReplacer(key: string, value: any) {
     if (value && typeof value === 'object' && 'start' in value && 'end' in value) {
@@ -816,13 +887,19 @@ export namespace AST {
 
             function traverse(currentNode: ASTNode){
                 let varName;
-                // console.log(currentNode.value, "pls");
-
                 if(
                     (currentNode.type === "Leaf" && 
                     currentNode.value.substring(0, 9) === "Variable:" && 
                     isRealVariable(currentNode) && 
-                    (currentNode.parent!.value === "Val" || currentNode.parent!.value === "NormalFunlit"))
+                    (
+                        currentNode.parent!.value === "Val" || 
+                        currentNode.parent!.value === "NormalFunlit" || 
+                        (
+                            currentNode.parent!.value === "FormBinding" &&
+                            currentNode.parent!.children![1] === currentNode
+                        )
+                    )
+                    )
                     
                 ) {
                     // "Variable: x" therefore V makes sense
@@ -925,8 +1002,6 @@ export namespace AST {
                                 } else {
                                     ret.set(varName, [[varNode], [currentNode.range]]);
                                 }
-
-
                             }
                         }
                     }
@@ -950,7 +1025,33 @@ export namespace AST {
 
                     // }
 
-                }
+
+                } else if (
+                    // For formlets...
+                    currentNode.type === "Node" && 
+                    currentNode.parent!.value === "FormBinding" && 
+                    currentNode.parent!.children![0] === currentNode
+                ){
+                    let varName = currentNode.children![0].value.split(" ")[1];
+                    let parentNode = currentNode;
+                    while(parentNode.value !== "Formlet"){
+                        parentNode = parentNode.parent!;
+                    }
+
+                    console.log("found formlet variable definition for", varName);
+
+                    if(ret.has(varName)) {
+                        
+
+                        ret.set(varName, [
+                            [...ret.get(varName)![0], currentNode],
+                            [...ret.get(varName)![1], parentNode.range]
+                        ]);
+                    } else {
+                        ret.set(varName, [[currentNode.children![0]], [parentNode.range]]);
+
+                    } 
+                }   
 
 
                 if(currentNode.children){
@@ -1013,6 +1114,13 @@ export namespace AST {
                     (currentNode.parent.value === "Val" || currentNode.parent.value === "NormalFunlit")
                 ) {
                     ret = true;
+                } else if
+                (
+                    currentNode.value === "FormBinding" &&
+                    currentNode.children![1].value === `Variable: ${name}`
+                )
+                {
+                    ret = true;
                 }
 
                 if(currentNode.children){
@@ -1042,7 +1150,12 @@ export namespace AST {
                 if(
                     currentNode.type === "Leaf" &&
                     currentNode.value === `Variable: ${getName(varNode)}` &&
-                    (currentNode.parent!.value === "Val" || currentNode.parent!.value ==="NormalFunlit" || (currentNode.parent && currentNode.parent.parent && currentNode.parent.parent.value === "Iteration"))
+                    (
+                        currentNode.parent!.value === "Val" || 
+                        currentNode.parent!.value ==="NormalFunlit" || 
+                        (currentNode.parent && currentNode.parent.parent && currentNode.parent.parent.value === "Iteration") ||
+                        currentNode.parent!.value === "FormBinding"
+                    )
                 ) {
                     ret = currentNode;
                 }
@@ -1061,14 +1174,46 @@ export namespace AST {
             return ret;
         }
 
+        // Checks if a node is under the formlet
+        // This is important because some variables are defined in the formlet
+        // Instead of returning true and false, just return the node itself since we need it
+        // and if the output node is the same as input we know it's not under a formlet
+        function isUnderFormlet(node: ASTNode){
+            let currNode = node;
+            while(currNode.value !== "Formlet" && (currNode.value !== "No Signature" && currNode.value !== "Fun" && currNode.value !== "Signature")){
+                currNode = currNode.parent!;
+            }
+
+            if(currNode.value === "Formlet"){
+                return currNode;
+            } else {
+                return node;
+            }
+
+        }
+
         function getVariableScopeAsASTNode(varNode: ASTNode, traversalNode: ASTNode): ASTNode {
+            console.log(`traversal node: ${JSON.stringify(traversalNode, removeParentAndChildren, 2)}`);
+            
             let currNode = traversalNode;
             let varName = variableParser.getName(varNode);
+
+            let formletNode = isUnderFormlet(varNode);
+            // Scope of variable defined in FormBinding is the FormBinding itself
+            // if(varNode.parent!.value === "FormBinding"){
+            //     console.log("Found scope for FormBinding");
+            //     return currNode.parent!;
+            // } 
+            // if(formletNode !== varNode){
+            //     console.log("Found scope for Formlet");
+            //     return formletNode;
+            // }
+
             while
             (
                 currNode.value !== "No Signature" && 
                 currNode.value !== "Fun" && 
-                currNode.value !== "Signature"            
+                currNode.value !== "Signature"   
             ){
                 currNode = currNode.parent!;
             }
@@ -1078,29 +1223,34 @@ export namespace AST {
             } else {
                 return getVariableScopeAsASTNode(varNode, currNode.parent!);
             }
-
         }
     
         // variableNodes: All nodes with value `Variable: {variable_name}`
         export function extractUnusedVariables(variableNodes: ASTNode[]): ASTNode[]{
             let ret: ASTNode[] = [];
 
-            
-
             for(const node of variableNodes){
+                console.log(`Finding scope for ${variableParser.getName(node)}`);
+                console.log(`AST: ${JSON.stringify(node, removeParentAndChildren, 2)}`);
                 let parentNode: ASTNode = getVariableScopeAsASTNode(node, node);
+                console.log("found scope of variable!");
+                console.log(`scope: ${JSON.stringify(parentNode.range, null, 2)}`);
                 let variableMap: Map<String, number> = new Map();
 
                 function traverse(currentNode: ASTNode) {
-                    if(currentNode.type === "Leaf" && 
+                    if
+                    (
+                        currentNode.type === "Leaf" && 
                         currentNode.value.substring(0, 9) === "Variable:" && 
-                        isRealVariable(currentNode)){
+                        isRealVariable(currentNode)
+                    )
+                        {
                             if(variableMap.has(currentNode.value)){
                                 variableMap.set(currentNode.value, variableMap.get(currentNode.value)!+1);
                             } else {
                                 variableMap.set(currentNode.value, 1);
                             }
-                    }
+                        }
                     if(currentNode.children){
                         for(const child of currentNode.children){
                             traverse(child);
@@ -1190,7 +1340,17 @@ export namespace AST {
         export function getFunctionReferencesFromAST(ast: ASTNode): ASTNode[] {
             let ret: ASTNode[] = [];
             function traverse(currentNode: ASTNode) {
-                if(currentNode.type === "Node" && currentNode.value === "FnAppl") {
+                if(
+                    (currentNode.type === "Node" && 
+                    currentNode.value === "FnAppl") ||
+                    (
+                        currentNode.type === "Leaf" && 
+                        currentNode.value.substring(0, 9) === "Variable:" &&
+                        currentNode.parent!.value === "FormBinding" &&
+                        currentNode.parent!.children![0] === currentNode
+                    )
+                
+                ) {
                     ret.push(currentNode);
                 }
                 if(currentNode.children){
@@ -1208,7 +1368,7 @@ export namespace AST {
         // Given an ASTNode of value "FnAppl" return the function name
         export function getFunctionNameFromFnAppl(node: ASTNode): string {
 
-
+            console.log(`name: ${JSON.stringify(node, removeParentAndChildren, 2)}`);
             let currNode = node.children![0];
             const operatorNameRegex = new RegExp(`Operators\\.Section\\.Name\\s*"([^"]*)"`);
             const operatorMatch = operatorNameRegex.exec(currNode.value);
@@ -1447,6 +1607,11 @@ export namespace AST {
             function traverse(currentNode: ASTNode){
                 if(currentNode.value === "FnAppl") {
                     ret.push(currentNode.children![0]);
+                } else if 
+                (
+                    currentNode.value === "FormBinding"
+                ){
+                    ret.push(currentNode.children![0]);
                 }
 
                 if(currentNode.children){
@@ -1515,9 +1680,28 @@ export namespace AST {
             let ret: string[] = [];
 
             function traverse(currentNode: ASTNode){
-                if(currentNode.type === "Node" && currentNode.value === "FnAppl"){
+
+                console.log(`currentNode: ${JSON.stringify(currentNode, removeParentAndChildren, 2)}`);
+
+
+                if
+                (
+                    currentNode.type === "Node" && 
+                    currentNode.value === "FnAppl"  
+                )
+                {
                     ret.push(currentNode.children![0].value.split(" ")[1]);
+                } else if
+                    (
+                        currentNode.parent &&
+                        currentNode.parent.children &&
+                        currentNode.parent.value ==="FormBinding" && 
+                        currentNode.parent.children[0] === currentNode
+                    )
+                {
+                    ret.push(variableParser.getName(currentNode));
                 }
+                
 
                 if(currentNode.children){
                     for(const child of currentNode.children){
@@ -1984,7 +2168,88 @@ export namespace AST {
             }
             return ""; // Return "" if "TextNode:" is not present
         }
-    }
+        export function extractXMLRanges(ast: ASTNode): Range[] {
+            let ret: Range[] = [];
+    
+            function traverse(currentNode: ASTNode){
+                if(currentNode.type === "Node" && currentNode.value === "Xml"){
+                    ret.push(currentNode.range);
+                }
+    
+                if(currentNode.children){
+                    for(const child of currentNode.children){
+                        traverse(child);
+                    }
+                }
+            }
+    
+            traverse(ast);
+            return ret;
+        }
+
+        export function adjustRanges(node: ASTNode, documentContent:string, tokenType: number): Range{
+            const lines = documentContent.split("\n");
+            console.log(`[adjustRanges] in here for tokentype: ${tokenType}`);
+            let lineIndex = node.range.start.line-2;
+
+            switch(tokenType){
+                case 8:
+                    let usedVarName = variableParser.getName(node);
+                    let regex = new RegExp(`${usedVarName}`, 'g');
+                    let usedVarMatch = regex.exec(lines[lineIndex]);
+
+                    let newRange =  Range.create(
+                        Position.create(node.range.start.line, usedVarMatch!.index+1),
+                        Position.create(node.range.start.line, usedVarMatch!.index+1 + usedVarName.length)
+                    );
+                    console.log(`[XML] Adjusted range for ${usedVarName}: ${JSON.stringify(newRange)}`);
+                    return newRange;
+                case 9:
+                    let unusedVarName = variableParser.getName(node);
+                    let unusedVarregex = new RegExp(`${unusedVarName}`, 'g');
+                    let unusedVarMatch = unusedVarregex.exec(lines[lineIndex]);
+
+                    let newRangeUnusedVar =  Range.create(
+                        Position.create(node.range.start.line, unusedVarMatch!.index+1),
+                        Position.create(node.range.start.line, unusedVarMatch!.index+1 + unusedVarName.length)
+                    );
+                    console.log(`[XML] Adjusted range for ${unusedVarName}: ${JSON.stringify(newRangeUnusedVar)}`);
+                    return newRangeUnusedVar;
+                case 27:
+                    let unusedFunName = variableParser.getName(node);
+                    let unfunRegex = new RegExp(`${unusedFunName}`, 'g');
+                    let unusedFunMatch = unfunRegex.exec(lines[lineIndex]);
+                    let unnewRangeUsedFun =  Range.create(
+                        Position.create(node.range.start.line, unusedFunMatch!.index+1),
+                        Position.create(node.range.start.line, unusedFunMatch!.index+1 + unusedFunName.length)
+                    );
+                    console.log(`[XML] Adjusted range for ${unusedFunName}: ${JSON.stringify(unnewRangeUsedFun)}`);
+                    return unnewRangeUsedFun;
+                case 28:
+                    let usedFunName = variableParser.getName(node);
+                    let funRegex = new RegExp(`${usedFunName}`, 'g');
+                    let usedFunMatch = funRegex.exec(lines[lineIndex]);
+                    let newRangeUsedFun =  Range.create(
+                        Position.create(node.range.start.line, usedFunMatch!.index+1),
+                        Position.create(node.range.start.line, usedFunMatch!.index+1 + usedFunName.length)
+                    );
+                    console.log(`[XML] Adjusted range for ${usedFunName}: ${JSON.stringify(newRangeUsedFun)}`);
+                    return newRangeUsedFun;
+            }
+
+            // Return null for now.
+            return Range.create(Position.create(0,0), Position.create(0,0));
+
+        }
+
+    } // End of xmlParser
+
+    // Create function which maps ASTNode range to actual range bc we know for a FACT that
+    // any node which is a child of an XML node is always wrong
+
+    // Should also have another function which checks if we are in the range of an XML node
+    // just traverse upwards until we hit root or an XML node
+
 
 
     // Given the document as a String, a Range, AND a regex, return the EXACT position

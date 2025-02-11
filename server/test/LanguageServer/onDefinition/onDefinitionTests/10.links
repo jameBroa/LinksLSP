@@ -1,0 +1,14 @@
+
+fun test(){
+    var x = 10;
+    fun foo(){
+        x+2
+    }
+    fun bar(){
+        x+3+foo()
+    }
+    x+foo()+bar()
+}
+
+test()
+# should return references of x if we request definition of x on x
