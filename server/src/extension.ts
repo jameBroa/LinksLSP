@@ -46,7 +46,7 @@ import * as lodash from 'lodash';
 import { Mutex } from 'async-mutex';
 import { LinksParserConstants } from './common/constants';
 import { isConstTypeReference } from 'typescript';
-import {LinksNode } from './common/ast/node';
+import {LSPFeatureHandler } from './common/ast/node';
 import { RangeReplacer } from './common/ast/namespaces/range';
 
 // Problem: How do we implement the GlobalLogger if we can't export it since we need to pass the connection variable
@@ -188,7 +188,8 @@ export class LanguageServer {
                 "xmlAttribute",
                 "projections",
                 "unusedFunction",
-                "usedFunction"
+                "usedFunction",
+                "functionCall"
               ],
               tokenModifiers: []
             },
@@ -243,7 +244,7 @@ export class LanguageServer {
 
     const referenceNode = AST.getClosestNodeFromAST(ast, position);
   
-    const node = new LinksNode(ast.children![0], params.textDocument.uri);
+    const node = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
 
     if(referenceNode === null){
       console.log("[LanguageServer.OnReferences] Could not find node at cursor position");
@@ -263,7 +264,7 @@ export class LanguageServer {
     if(env === ENV_MODE.FAST) {
       console.log(`[LanguageServer.OnReferences] Fast mode`);
       console.log(`[Fast Result]: ${JSON.stringify(LinksNodeReferences, AST.removeParentAndChildren, 2)}`);
-      node.PrintAllFunVarRefNDef();
+      // node.PrintAllFunVarRefNDef();
 
       return LinksNodeReferences;
     }
@@ -490,7 +491,6 @@ export class LanguageServer {
   }
 
   public async onDefinition(params: TextDocumentPositionParams): Promise<Location | null> {
-    // Can do for variables and functions
     let ast;
     if(this.documentsMap.has(params.textDocument.uri)) {
       ast = await this.getASTFromText(this.documentsMap.get(params.textDocument.uri)!);
@@ -503,7 +503,6 @@ export class LanguageServer {
     }
 
     console.log(`user position: ${JSON.stringify(params.position, null, 2)}`);
-    console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
     const referenceNode = AST.findNodeAtPosition(
       ast, 
       Position.create(
@@ -512,8 +511,8 @@ export class LanguageServer {
       )
     );
 
-    const node = new LinksNode(ast.children![0], params.textDocument.uri);
-    node.PrintAllFunVarRefNDef();
+    const node = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
+    // node.PrintAllFunVarRefNDef();
     let definition: Location | null = null;
     if(referenceNode !== null) {
 
@@ -535,10 +534,6 @@ export class LanguageServer {
       return definition;
     }
 
-    
-    
-
-
     if(
       referenceNode.parent && 
       referenceNode.parent.value==="FnAppl" && 
@@ -556,8 +551,6 @@ export class LanguageServer {
         return null;
       }
       let ret;
-      // For some reason, if the function is on the first line, the character is off by 1. Not sure why
-      // console.log(`[LanguageServer.onDefinition] functionDefinition.range.start.line: ${functionDefinition.range.start.line}`);
       if(functionDefinition.range.start.line === 1) {
         ret =  Location.create(
           params.textDocument.uri,
@@ -592,10 +585,8 @@ export class LanguageServer {
             Position.create(referenceNode.range.end.line-2, referenceNode.range.end.character-1)
           )
         );
-        // console.log(`[LanguageServer.OnDefinition] ret: ${JSON.stringify(ret, null, 2)}`);
         return ret;
       }
-      // console.log(`[LanguageServer.OnDefinition] referenceNode: ${JSON.stringify(referenceNode, AST.removeParentField, 2)}`);
       let definitionNode = AST.variableParser.extractVariableDefinition(referenceNode);
 
       if(!definitionNode) {
@@ -671,25 +662,7 @@ export class LanguageServer {
       //   return ret;
       // }
     }
-    // Old code which will be implemented via ASTs 
 
-    // const lines = text.split(/\r?\n/g);
-    // const word = InfoRetriever.getWordAtPosition(lines, params.position);
-    // // GlobalLogger.log(`word: ${word}`);
-    // for(let i = 0; i < lines.length; i++){
-    //   const line = lines[i];
-    //   const match = new RegExp(`fun\\s+${word}\\s*\\(`).exec(line);
-    //   if(match){
-    //     return Location.create(
-    //       params.textDocument.uri, 
-    //       Range.create(
-    //         Position.create(i, match.index), 
-    //         Position.create(i, match.index + match[0].length)
-    //       )
-    //     );
-    //   }
-    // }
-    // return null;
   }
   private async onHover(params: TextDocumentPositionParams): Promise<Hover | null> {
     const document = this.documents.get(params.textDocument.uri);
@@ -791,19 +764,18 @@ export class LanguageServer {
       return [];
     }
 
-    const node = new LinksNode(ast.children![0], textDocument.uri); 
+    const node = new LSPFeatureHandler(ast.children![0], textDocument.uri); 
     const LinksNodeDiagnostics = node.GetDiagnostics(this.hasDiagnosticRelatedInformationCapability);
-    node.PrintAllFunVarRefNDef();
-    console.log(`AST: ${JSON.stringify(ast, AST.removeParentField, 2)}`)
-    // if(env === ENV_MODE.FAST){
-    //   console.log(`[ValidateTextDocument] Finishing FAST!`);
-    //   this.connection.sendDiagnostics({
-    //     uri:textDocument.uri, 
-    //     diagnostics: LinksNodeDiagnostics
-    //   });
-    //   console.log(`All diagnostics: ${JSON.stringify(LinksNodeDiagnostics, AST.removeParentAndChildren, 2)}`);
-    //   return LinksNodeDiagnostics;
-    // }
+    // node.PrintAllFunVarRefNDef();
+    if(env === ENV_MODE.FAST){
+      console.log(`[ValidateTextDocument] Finishing FAST!`);
+      this.connection.sendDiagnostics({
+        uri:textDocument.uri, 
+        diagnostics: LinksNodeDiagnostics
+      });
+      console.log(`All diagnostics: ${JSON.stringify(LinksNodeDiagnostics, AST.removeParentAndChildren, 2)}`);
+      return LinksNodeDiagnostics;
+    }
 
     let diagnostics: Diagnostic[] = [];
 
@@ -955,7 +927,20 @@ export class LanguageServer {
       console.log("[OnRequestFull] Couldn't get AST");
       return;
     }
+    try{
+    const node = new LSPFeatureHandler(ast, params.textDocument.uri);
+    let SemanticTokensNew = node.BuildSemanticTokensFull(documentText!);
+    node.PrintAllFunVarRefNDef();
+    console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
+    
 
+    if(env === ENV_MODE.FAST) {
+      console.log(`[onRequestFull] Fast mode results: ${Array.from(SemanticTokensNew!.data)}`);
+      return SemanticTokensNew;
+    }
+  } catch (e){
+    console.log("[FAILED TO BUILD SEMANTIC TOKENS]", e);
+  }
     let builder = new SemanticTokensBuilder();
 
     // ##################### VARIABLES #####################

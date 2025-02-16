@@ -1,6 +1,6 @@
 import { Position, Range } from "vscode-languageserver";
 import { AST } from "../ast";
-import { LinksNode, VariableNode, VariableNodeDef } from "../node";
+import { LSPFeatureHandler, VariableNode, VariableNodeDef } from "../node";
 import { addToDefinitions, addToXNode, createScopeNode, createScopeNodeForDef, ExtractExactDefinition, RefDef, traverseASTByLevel, traverseASTFull } from "./shared";
 
 
@@ -90,7 +90,8 @@ export namespace Variable {
             if(
                 node.parent && 
                 node.parent.parent && 
-                node.parent.parent.value === "Iteration"
+                node.parent.parent.value === "Iteration" &&
+                node.value.substring(0,9) === "Variable:" // Added this line
                 ){
                 if(node.parent.children![0] === node){
                     return true;
@@ -99,14 +100,27 @@ export namespace Variable {
             return false;
         }
 
+        export function isDatabase(node: AST.ASTNode): boolean {
+            if (
+                node.type === "Leaf" &&
+                node.parent &&
+                (node.parent.value === "DBDelete" || node.parent.value === "DBUpdate")) {
+                    if(node.parent.children![0] === node){
+                        return true;
+                    }
+                }
+                return false;
+        }
+
         export function isVariableDefinition(node: AST.ASTNode): boolean {
             return (
                 (
                     isLeafAndVariable(node) && 
                     !isFnAppl(node) &&
                     hasValidParent(node)
-                ) ||
-                isIteration(node)
+                ) 
+                || isIteration(node) 
+                || isDatabase(node)
             );
         }
 
@@ -133,14 +147,11 @@ export namespace Variable {
 
     function getScope(varNode: AST.ASTNode, currentScope: AST.ASTNode) {
         let varName = getName(varNode);
-        console.log("\n\n Getting scope for variable: " + varName);
 
-        console.log(`currentScope (before) ${JSON.stringify(currentScope.range)}`);
         while(VariableConditions.hasNotReachedParentScope(currentScope)){
             // Can do '.parent!' because hasNotReachedParentScope
             currentScope = currentScope.parent!; 
         }
-        console.log(`currentScope (after) ${JSON.stringify(currentScope.range)}`);
 
         let LocalDefinitions = ExtractLocalDefinitions(currentScope);
 
@@ -156,7 +167,6 @@ export namespace Variable {
             if(currentScope.parent && !VariableConditions.isAtRootOfAST(currentScope)){
                 return getScope(varNode, currentScope.parent);
             } else {
-                console.log(`Couldn't find scope for ${varName}!`);
                 return currentScope;
             }
         }
@@ -175,7 +185,6 @@ export namespace Variable {
             if(currentScope.parent && !VariableConditions.isAtRootOfAST(currentScope)){
                 return getScope(varNode, currentScope.parent);
             } else {
-                console.log(`Couldn't find scope for ${varName}!`);
                 return currentScope;
             }
         }
@@ -210,6 +219,10 @@ export namespace Variable {
         return IterationScope;
     }
 
+    function getScopeOfDatabase(node: AST.ASTNode): AST.ASTNode {
+        return node.parent!;
+    }
+
     export function ExtractDefinitions(ast: AST.ASTNode): Map<string, VariableNodeDef[]> {
         let definitions = new Map<string, VariableNodeDef[]>();
 
@@ -217,9 +230,15 @@ export namespace Variable {
             let varName;
             if(VariableConditions.isVariableDefinition(currentNode)) {
                 varName = getName(currentNode);
+                // console.log(`found definition for: ${varName}`);
+                // console.log(`currentNode: ${JSON.stringify(currentNode, AST.removeParentAndChildren, 2)}`);
                 let scopeNode: AST.ASTNode;
                 if(VariableConditions.isIteration(currentNode)){
                     scopeNode = getScopeOfIteration(currentNode);
+                } else if (VariableConditions.isDatabase(currentNode)) {
+                    console.log(`found db variable!`);
+                    scopeNode = getScopeOfDatabase(currentNode);
+                    console.log(`db variable scope: ${JSON.stringify(scopeNode, AST.removeParentAndChildren, 2)}`);
                 } else {
                     scopeNode = getScopeOfDef(currentNode, currentNode);
                 }

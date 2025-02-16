@@ -3,6 +3,7 @@ import { AST } from "../ast";
 import { RangeReplacer } from "../namespaces/range";
 import { Function } from "../namespaces/function";
 import { FunctionNode, FunctionNodeDef, VariableNode, VariableNodeDef } from "../node";
+import { LinksParserConstants } from "../../constants";
 
 type DiagnosticInfo = {
     node: AST.ASTNode,
@@ -32,7 +33,7 @@ function CreateUndefinedVariableDiagnostics(
             }
         }   
     }
-    console.log(`[LinksNode] UndefinedVariableDiagnostic: "${JSON.stringify(UndefinedVariableDiagnostic, AST.removeParentAndChildren, 2)}"`);
+    // console.log(`[LinksNode] UndefinedVariableDiagnostic: "${JSON.stringify(UndefinedVariableDiagnostic, AST.removeParentAndChildren, 2)}"`);
     return UndefinedVariableDiagnostic;
 }
 
@@ -81,7 +82,7 @@ function CreateMultipleVariableDefinitionsDiagnostic(
             MultipleVariableDefinitionsDiagnostic
         );
     }
-    console.log(`[LinksNode] MultipleVariableDefinitionsDiagnostic: "${JSON.stringify(MultipleVariableDefinitionsDiagnostic, AST.removeParentAndChildren, 2)}"`);
+    // console.log(`[LinksNode] MultipleVariableDefinitionsDiagnostic: "${JSON.stringify(MultipleVariableDefinitionsDiagnostic, AST.removeParentAndChildren, 2)}"`);
 
     return MultipleVariableDefinitionsDiagnostic;
 }
@@ -97,7 +98,7 @@ function CreateUndefinedFunctionDiagnostic(
         if(refs){
             for(const ref of refs){
                 let defOfRef = functionRefToDef.get(ref.function.children![0]);
-                if(defOfRef === undefined){
+                if(defOfRef === undefined && !LinksParserConstants.LINKS_FUNCS.has(key)){
                     UndefinedFunctionDiagnostic.push(
                         {
                             node: ref.function,
@@ -139,7 +140,7 @@ function CreateFunctionCallsAndParametersDiagnostic(
             }
         }
     }
-    console.log(`[LinksNode] FunctionCallsAndParametersDiagnostic: "${JSON.stringify(FunctionCallsAndParametersDiagnostic, AST.removeParentAndChildren, 2)}"`);
+    // console.log(`[LinksNode] FunctionCallsAndParametersDiagnostic: "${JSON.stringify(FunctionCallsAndParametersDiagnostic, AST.removeParentAndChildren, 2)}"`);
     return FunctionCallsAndParametersDiagnostic;
 }
 

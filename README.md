@@ -48,7 +48,12 @@ Calling out known issues can help limit users opening duplicate issues against y
 
 ## Release Notes
 
-### 11/09/25
+### 16/02/25
+- Finished reworking whole pipeline with SemanticTokens finished
+- All tests are passing
+- Robustness will be tested w/ new pipeline against existing Links files...
+
+### 11/02/25
 - Reworked the whole pipeline
 - Made it more efficient
 - Modularized code

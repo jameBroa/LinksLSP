@@ -124,6 +124,10 @@
       {
         "id":"unusedFunction",
         "description": "Links Unused Function"
+      },
+      {
+        "id":"functionCall",
+        "description": "Links Function Call"
       }
     ],
     "semanticTokenScopes": [
@@ -159,6 +163,9 @@
           ],
           "unusedFunction":[
             "unusedFunction.links"
+          ],
+          "functionCall":[
+            "functionCall.links"
           ]
           
         }

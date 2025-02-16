@@ -54,24 +54,24 @@ export namespace Function{
 
     function getScope(funNode: AST.ASTNode, currentScope: AST.ASTNode){
         let funName = getNameFromFnAppl(funNode);
-        console.log(`[Function] Looking for ${funName} in scope ${JSON.stringify(currentScope.range)}`);
+        // console.log(`[Function] Looking for ${funName} in scope ${JSON.stringify(currentScope.range)}`);
         while(FunctionConditions.hasNotReachedParentScope(currentScope)){
             currentScope = currentScope.parent!;
         }
-        console.log(`traversed up until: ${JSON.stringify(currentScope.range)}`);
+        // console.log(`traversed up until: ${JSON.stringify(currentScope.range)}`);
 
         
 
         // Avoids recomputation of all local definitions
         let LocalDefinitions = ExtractLocalDefinitions(currentScope);
-        console.log(`[Function] Local definitions: ${JSON.stringify(Array.from(LocalDefinitions.keys()))}`);
+        // console.log(`[Function] Local definitions: ${JSON.stringify(Array.from(LocalDefinitions.keys()))}`);
         if(LocalDefinitions.has(funName)){
-            console.log(`[Function] Found local definition for ${funName}!`);
+            // console.log(`[Function] Found local definition for ${funName}!`);
             let localDefNodes = LocalDefinitions.get(funName)!;
-            console.log(`[Function] Local definitions: ${JSON.stringify(localDefNodes.map(node => node.range))}`);
+            // console.log(`[Function] Local definitions: ${JSON.stringify(localDefNodes.map(node => node.range))}`);
             let defNode = ExtractExactDefinition(localDefNodes, currentScope, funNode);
             if(defNode === null){
-                console.log(`[Function] Could not find definition for ${funName}!`);
+                // console.log(`[Function] Could not find definition for ${funName}!`);
                 return funNode; // If there's an error, return funNode
             }
             return createScopeNode(currentScope, defNode);
@@ -97,7 +97,7 @@ export namespace Function{
                 if(currentScope.parent && !FunctionConditions.isAtRootOfAST(currentScope)){
                     return getScope(funNode, currentScope.parent);
                 } else {
-                    console.log(`Couldn't find scope for ${funName}!`);
+                    // console.log(`Couldn't find scope for ${funName}!`);
                     return currentScope;
                 }
             }
@@ -175,6 +175,10 @@ export namespace Function{
     export function ExtractNumParamsFromDef(node: AST.ASTNode): number {
         // console.log(`[ExtractNumParamsFromDef] node: ${JSON.stringify(node, AST.removeParentField, 2)}`);
         return node.children![1].children!.length-1;
+    }
+
+    export function hasSignature(node: AST.ASTNode){
+        return node.children![node.children!.length-1].value === "Signature";
     }
 
 }

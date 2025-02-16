@@ -1274,9 +1274,6 @@ export namespace AST {
             function traverse(currentNode: ASTNode){
 
                 if(currentNode.type === "Node" && currentNode.value === "Projection"){
-                    // Range information actually considers THE WHOLE definition of the variable
-                    // i.e. if we have val.id, range includes val.id.
-                    // we want to extract only the 'id' part
                     ret.push({
                         type: currentNode.type,
                         value: currentNode.children![1].value,
@@ -2259,8 +2256,8 @@ export namespace AST {
     export function extractRegexPosition(documentText: string, nodeRange: Range, regex: RegExp): Range {
         // console.log(`[extractRegexPosition] Extracting regex position for ${regex} in range ${JSON.stringify(nodeRange)}`);
         const documentByLine = documentText.split("\n");
-        const startLine = nodeRange.start.line-2;
-        const endLine = nodeRange.end.line-2;
+        const startLine = nodeRange.start.line;
+        const endLine = nodeRange.end.line;
         for(let i = startLine; i < endLine; i++) {
             const line = documentByLine[i];
             const match = regex.exec(line);

@@ -27,6 +27,12 @@
       }
     },
     {
+      "scope":"functionCall.links",
+      "settings":{
+        "foreground":"#DCDCAA"
+      }
+    },
+    {
       "scope": "keyword.control.links",
       "settings": {
         "foreground": "#569CD6"
