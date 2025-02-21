@@ -1,11 +1,22 @@
+import { Position, Range } from "vscode-languageserver";
 import { AST } from "../ast";
 import { FunctionNode, FunctionNodeDef, VariableNode, VariableNodeDef, XNode } from "../node";
 import { Function } from "./function";
 import { Variable } from "./variable";
+import { split } from "lodash";
 
 export type RefDef<T extends XNode = XNode> = {
     definitions: Map<string, AST.ASTNode[]>,
     references: Map<string, T[]>
+}
+
+export function ExtractStringFromStrConstant(input: string): string{
+    let regex = new RegExp(`CommonTypes\\.Constant\\.String\\s*"([^"]*)"`);
+    let match = regex.exec(input);
+    if(match){
+        return match![1];
+    }
+    return "";
 }
 
 export function traverseASTByLevel(currentNode: AST.ASTNode, callback: (node: AST.ASTNode) => void){
@@ -199,7 +210,7 @@ export function ExtractConstantsAndProjectionsAndXML(ast: AST.ASTNode): {all_con
         if(currentNode.type === "Node" && currentNode.value === "Projection"){
             Projections.push(currentNode.children![1]);
         }
-        if(currentNode.type === "Leaf" && currentNode.parent && currentNode.parent.value === "Xml"){
+        if(currentNode.parent && currentNode.parent.value === "Xml"){
             XMLNodes.push(currentNode);
         }
 
@@ -267,15 +278,202 @@ function ExtractFunctionsByUsage(
     return functions;
 }
 
+function IsOpenAndCloseXMLTag(node: AST.ASTNode, documentText: string): boolean {
+    let split_by_line = documentText.split("\n");
+    let str = split_by_line[node.range.end.line-2];
+    let lower = node.range.end.character-4;
+    let upper = node.range.end.character-3;
+    return str.substring(lower, upper) === "/";
+}
+
+function CreateTags(isSelfClosing: boolean, node: AST.ASTNode, desired_sibling: AST.ASTNode, xml_tags: AST.ASTNode[]){
+    // Means it is defined by <X>{contents}</X>
+
+    if(isSelfClosing === false){
+        let opening_tag_end: AST.ASTNode | null = null;
+        if(desired_sibling.value.substring(0,9)==="TextNode:" || desired_sibling.value === "Block"){
+            opening_tag_end = {
+                type: "Node",
+                value: "Opening tag: >",
+                range: Range.create(
+                    Position.create(desired_sibling.range.start.line, desired_sibling.range.start.character-1),
+                    Position.create(desired_sibling.range.start.line, desired_sibling.range.start.character)
+                ),
+                parent: node.parent,
+                children: node.children
+            } as AST.ASTNode;
+        } else {
+            opening_tag_end = {
+                type: "Node",
+                value: "Opening tag: >",
+                range: Range.create(
+                    Position.create(desired_sibling.range.end.line, desired_sibling.range.end.character-6),
+                    Position.create(desired_sibling.range.end.line, desired_sibling.range.end.character-5)
+                ),
+                parent: node.parent,
+                children: node.children
+            } as AST.ASTNode;
+        }
+
+        let closing_tag_start = {
+            type: node.type,
+            value: "Closing tag: </",
+            range: Range.create(
+                Position.create(node.range.end.line, node.range.end.character-node.value.length-3),
+                Position.create(node.range.end.line, node.range.end.character-node.value.length-1)
+            ),
+            parent: node.parent,
+            children: node.children
+        } as AST.ASTNode;
+
+        let closing_tag_end = {
+            type: node.type,
+            value: "Closing tag: >",
+            range: Range.create(
+                Position.create(node.range.end.line, node.range.end.character-1),
+                Position.create(node.range.end.line, node.range.end.character)
+            ),
+            parent: node.parent,
+            children: node.children
+        } as AST.ASTNode;
+
+        xml_tags.push(... [opening_tag_end, closing_tag_start, closing_tag_end]);
+    } else {
+        let opening_tag_end = {
+            type: "Node",
+            value: "/>",
+            range: Range.create(
+                Position.create(desired_sibling.range.end.line, desired_sibling.range.end.character-2),
+                Position.create(desired_sibling.range.end.line, desired_sibling.range.end.character)
+            ),
+            parent: node.parent,
+            children: node.children
+        } as AST.ASTNode;
+        xml_tags.push(opening_tag_end);
+    }
+}
+
 export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_declarations: AST.ASTNode[], xml_tags:AST.ASTNode[], xml_attributes: AST.ASTNode[] } {
     let xml_declarations: AST.ASTNode[] = [];
     let xml_tags: AST.ASTNode[] = [];
     let xml_attributes: AST.ASTNode[] = [];
     let xml_text: AST.ASTNode[] = [];
+    let new_xml_declarations: AST.ASTNode[] = [];
+    let new_xml_attributes: AST.ASTNode[] = [];
+
+    let split_by_line = documentText.split("\n");
+
+    console.log(`[ExtractXML] all_xml: ${JSON.stringify(all_xml, AST.removeParentAndChildren, 2)}`);
 
     xml_text = all_xml.filter((node) => {
         return node.value.substring(0, 9) === "TextNode:";
     });
+
+    console.log(`[ExtractXML] xml_text: ${JSON.stringify(xml_text, AST.removeParentAndChildren, 2)}`);
+
+
+    let declarations = all_xml.filter((node) => {
+        if(node.parent && node.parent.value === "Xml" && node.parent!.children![0] === node){
+            return node;
+        } 
+    });
+
+    console.log(`[ExtractXML] declarations: ${JSON.stringify(declarations, AST.removeParentField, 2)}`);
+
+
+
+
+    for(const node of declarations){
+
+        let opening_tag_start = {
+            type: node.type,
+            value: "Opening tag: <",
+            range: Range.create(
+                Position.create(node.range.start.line, node.range.start.character),
+                Position.create(node.range.start.line, node.range.start.character+1)
+            ),
+            parent: node.parent,
+            children: node.children
+        } as AST.ASTNode;
+        xml_tags.push(opening_tag_start);
+
+
+
+        let siblings = node.parent!.children!;
+
+        let remove_attr_siblings = siblings.filter((node) => {
+            return node.value.substring(0,9) !== "Attribute";
+        });
+
+        // Basically xml that's not declared like this: <test/>
+        if(remove_attr_siblings.length > 1){
+            let desired_sibling = remove_attr_siblings[1];
+            console.log(`desired_sibling ${node.value}, ${JSON.stringify(desired_sibling, AST.removeParentAndChildren, 2)}`);
+            let self_closing = IsOpenAndCloseXMLTag(desired_sibling, documentText);
+            CreateTags(self_closing, node, desired_sibling, xml_tags);
+
+        } else {
+            console.log(`[remove_attr_siblings] ${node.value}: ${JSON.stringify(remove_attr_siblings, AST.removeParentAndChildren, 2)}`);
+            let desired_sibling = remove_attr_siblings[0];
+            let self_closing = IsOpenAndCloseXMLTag(desired_sibling, documentText);
+            CreateTags(self_closing, node, desired_sibling, xml_tags);
+        }
+
+        
+    }
+
+
+    for(const node of declarations){
+        let siblings = node.parent!.children!;
+
+        let remove_attr_siblings = siblings.filter((node) => {
+            return node.value.substring(0,9) !== "Attribute";
+        });
+        let desired_sibling: AST.ASTNode | null = null;
+
+        if(remove_attr_siblings.length > 1){
+            desired_sibling = remove_attr_siblings[1];
+        } else {
+            desired_sibling = remove_attr_siblings[0];
+        }
+        let self_closing = IsOpenAndCloseXMLTag(desired_sibling, documentText);
+        let str = split_by_line[node.range.end.line-2];
+        let open_and_close = str.substring(str.length-2, str.length-1) === "/";
+        let opening_node = {
+            type: node.type,
+            value: `Opening: ${node.value}`,
+            range: Range.create(
+                Position.create(node.range.start.line, node.range.start.character+1),
+                Position.create(node.range.start.line, node.range.start.character+1+node.value.length)
+            ),
+            parent: node.parent,
+            children: node.children
+        } as AST.ASTNode;
+
+        if(!self_closing){
+            let closing_node = {
+                type: node.type,
+                value: `Closing: ${node.value}`,
+                range: Range.create(
+                    Position.create(node.range.end.line, node.range.end.character-1-node.value.length),
+                    Position.create(node.range.end.line, node.range.end.character-1)
+                ),
+                parent: node.parent,
+                children: node.children
+            } as AST.ASTNode;
+            new_xml_declarations.push(closing_node);
+        } 
+        new_xml_declarations.push(opening_node);
+    }
+
+    console.log(`[ExtractXML] new_xml_declarations: ${JSON.stringify(new_xml_declarations, AST.removeParentAndChildren, 2)}`);
+
+    new_xml_attributes = all_xml.filter((node) => {
+        return node.value.substring(0,9) === "Attribute";
+    });
+
+    console.log(`[ExtractXML] new_xml_attributes: ${JSON.stringify(new_xml_attributes, AST.removeParentAndChildren, 2)}`);
+
 
     let xml_semantics = AST.xmlParser.extractSemantics(all_xml, documentText);
 
@@ -283,15 +481,17 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
         return node.value !== "xmlTag" && node.value !== "xmlAttribute";
     });
   
-    xml_tags = xml_semantics.filter((node) => {
-        return node.value === "xmlTag";
-    });
+    // xml_tags = xml_semantics.filter((node) => {
+    //     return node.value === "xmlTag";
+    // });
 
     xml_attributes = xml_semantics.filter((node) => {
         return node.value === "xmlAttribute";
     });
 
-    return {xml_declarations, xml_tags, xml_attributes};
+    console.log(`[ExtractXML] xml_tags: ${JSON.stringify(xml_tags, AST.removeParentAndChildren, 2)}`);
+
+    return {xml_declarations:new_xml_declarations, xml_tags, xml_attributes:new_xml_attributes};
 }
 
 

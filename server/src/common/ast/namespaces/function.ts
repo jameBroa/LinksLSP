@@ -1,17 +1,39 @@
-import { Range } from "vscode-languageserver";
+import { Position, Range } from "vscode-languageserver";
 import { AST } from "../ast";
 import { FunctionNode, FunctionNodeDef } from "../node";
 import { addToDefinitions, addToXNode, createScopeNode, createScopeNodeForDef, ExtractExactDefinition, RefDef, traverseASTByLevel, traverseASTFull } from "./shared";
+import { Variable } from "./variable";
 
 export namespace Function{
 
-    namespace FunctionConditions {
+    export namespace FunctionConditions {
+
+        export function isFunctionReferenceInFormBinding(node: AST.ASTNode): boolean {
+            return (node.type === "Leaf" &&
+                node.parent !== null &&
+                node.parent.value === "FormBinding" &&
+                node.parent.children![0] === node
+            );
+        }
+
+        export function isFormletPlacement(node: AST.ASTNode): boolean {
+            return (node.type === "Leaf" &&
+                node.parent !== null &&
+                node.parent.value === "FormletPlacement" &&
+                node.parent.children![1] === node
+            );
+        }
+
 
         export function isFunctionReference(node: AST.ASTNode): boolean {
             if(node.parent){
                 return (
-                    node.value === "FnAppl" && 
-                    node.children![0].value.substring(0, 9) === "Variable:"
+                    (
+                        node.value === "FnAppl" && 
+                        node.children![0].value.substring(0, 9) === "Variable:"
+                    ) || isFunctionReferenceInFormBinding(node)
+                    || isFormletPlacement(node)
+                    
                 );
             }
             return false;
@@ -58,20 +80,20 @@ export namespace Function{
         while(FunctionConditions.hasNotReachedParentScope(currentScope)){
             currentScope = currentScope.parent!;
         }
-        // console.log(`traversed up until: ${JSON.stringify(currentScope.range)}`);
+        console.log(`traversed up until: ${JSON.stringify(currentScope.range)}`);
 
         
 
         // Avoids recomputation of all local definitions
         let LocalDefinitions = ExtractLocalDefinitions(currentScope);
-        // console.log(`[Function] Local definitions: ${JSON.stringify(Array.from(LocalDefinitions.keys()))}`);
+        console.log(`[Function] Local definitions: ${JSON.stringify(Array.from(LocalDefinitions.keys()))}`);
         if(LocalDefinitions.has(funName)){
-            // console.log(`[Function] Found local definition for ${funName}!`);
+            console.log(`[Function] Found local definition for ${funName}!`);
             let localDefNodes = LocalDefinitions.get(funName)!;
             // console.log(`[Function] Local definitions: ${JSON.stringify(localDefNodes.map(node => node.range))}`);
             let defNode = ExtractExactDefinition(localDefNodes, currentScope, funNode);
             if(defNode === null){
-                // console.log(`[Function] Could not find definition for ${funName}!`);
+                console.log(`[Function] Could not find definition for ${funName}!`);
                 return funNode; // If there's an error, return funNode
             }
             return createScopeNode(currentScope, defNode);
@@ -141,6 +163,16 @@ export namespace Function{
         return definitions;
     }
 
+    function CreateFnApplNode(node: AST.ASTNode, range: Range, parent: AST.ASTNode){
+        return {
+            type: "Node",
+            value: "FnAppl",
+            range: range,
+            parent: parent,
+            children: [node]
+        } as AST.ASTNode;
+    }
+
     export function ExtractReferences(ast: AST.ASTNode): Map<string, FunctionNode[]>{
         let references = new Map<string, FunctionNode[]>();
 
@@ -149,15 +181,64 @@ export namespace Function{
             let scopeNode;
 
             if(FunctionConditions.isFunctionReference(currentNode)){
-                funName = getNameFromFnAppl(currentNode);
-                scopeNode= getScope(currentNode, currentNode);
+                let funNode: AST.ASTNode = currentNode;
 
-                let functionNode = {
-                    function: currentNode,
-                    scope: scopeNode
-                } as FunctionNode;
+                if(FunctionConditions.isFunctionReferenceInFormBinding(currentNode)){
+                    funName = Variable.getName(currentNode);
+                    scopeNode = currentNode.parent!;
+                    let newRange = Range.create(
+                        Position.create(currentNode.range.start.line, currentNode.range.start.character),
+                        scopeNode.range.end
+                    );
+                    funNode = CreateFnApplNode(currentNode, newRange, scopeNode);
+                    // let astNode = {
+                    //     type: "Node",
+                    //     value: "FnAppl",
+                    //     range: Range.create(
+                    //         Position.create(currentNode.range.start.line, currentNode.range.start.character),
+                    //         scopeNode.range.end
+                    //     ),
+                    //     parent: currentNode.parent,
+                    //     children: [currentNode]
+                    // } as AST.ASTNode;
+                    // let functionNode = {
+                    //     function: astNode,
+                    //     scope: scopeNode
+                    // } as FunctionNode;
+                    // addToXNode(references, funName, functionNode);
+                } else if (FunctionConditions.isFormletPlacement(currentNode)) {
+                    console.log(`inside formlet placement`);
+                    funName = Variable.getName(currentNode);
+                    console.log(`looking scope for ${funName}`);
+                    scopeNode = currentNode.parent!;
 
-                addToXNode(references, funName, functionNode);
+                    // scopeNode = getScope(currentNode, currentNode);
+                    let newRange = Range.create(
+                        Position.create(currentNode.range.start.line, currentNode.range.start.character),
+                        scopeNode.range.end
+                    );
+                    funNode = CreateFnApplNode(currentNode, newRange, scopeNode);
+                } else {
+                    funName = getNameFromFnAppl(currentNode);
+                    scopeNode= getScope(currentNode, currentNode);
+                    funNode = currentNode;
+                    // let functionNode = {
+                    //     function: currentNode,
+                    //     scope: scopeNode
+                    // } as FunctionNode;
+                    // addToXNode(references, funName, functionNode);
+                }
+
+                if(scopeNode && funNode){
+                    console.log(`scope for ${funName}`)
+                    console.log(`found scope: ${JSON.stringify(scopeNode.range)}`)
+                    let functionNode = {
+                        function: funNode,
+                        scope: scopeNode
+                    } as FunctionNode;
+                    addToXNode(references, funName, functionNode);
+                }
+
 
             }
             traverseASTFull(currentNode, traverse);

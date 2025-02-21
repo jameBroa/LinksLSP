@@ -2,6 +2,7 @@ import { Position, Range } from "vscode-languageserver";
 import { AST } from "../ast";
 import { LSPFeatureHandler, VariableNode, VariableNodeDef } from "../node";
 import { addToDefinitions, addToXNode, createScopeNode, createScopeNodeForDef, ExtractExactDefinition, RefDef, traverseASTByLevel, traverseASTFull } from "./shared";
+import { Function } from "./function";
 
 
 export namespace Variable {
@@ -66,7 +67,8 @@ export namespace Variable {
         function isFormlet(node: AST.ASTNode): boolean {
             if(node.parent){
                 return (
-                    node.type === "Node" &&
+                    node.type === "Leaf" &&
+                    node.value.substring(0,9) === "Variable:" &&
                     node.parent.value === "FormBinding" &&
                     node.parent.children![0] === node
                 );
@@ -82,7 +84,9 @@ export namespace Variable {
                 !isFunReference(node) &&
                 // !isFnAppl(node) &&
                 !isParameter(node) 
-                // && isFormlet(node)
+                && !isFormlet(node)
+                && !Function.FunctionConditions.isFormletPlacement(node)
+
             );
         }
 
@@ -112,6 +116,13 @@ export namespace Variable {
                 return false;
         }
 
+        export function isRecord(node: AST.ASTNode): boolean {
+            return (node.type === "Leaf" && 
+                node.value.substring(0, 9) === "Variable:" && 
+                node.parent !== null && 
+                node.parent.value === "Record");
+        }
+
         export function isVariableDefinition(node: AST.ASTNode): boolean {
             return (
                 (
@@ -121,6 +132,7 @@ export namespace Variable {
                 ) 
                 || isIteration(node) 
                 || isDatabase(node)
+                || isRecord(node)
             );
         }
 
@@ -174,10 +186,14 @@ export namespace Variable {
 
     function getScopeOfDef(varNode: AST.ASTNode, currentScope: AST.ASTNode) {
         let varName = getName(varNode);
+        console.log(`current pos (bef): ${JSON.stringify(currentScope.range)}`);
         while(VariableConditions.hasNotReachedParentScope(currentScope)){
             // Can do '.parent!' because hasNotReachedParentScope
             currentScope = currentScope.parent!; 
+            console.log(`current pos (inbetw.): ${JSON.stringify(currentScope.range)}`);
         }
+        console.log(`current pos (aft): ${JSON.stringify(currentScope.range)}`);
+
         let LocalDefinitions = ExtractLocalDefinitions(currentScope);
         if(LocalDefinitions.has(varName)){
             return createScopeNodeForDef(currentScope, varNode);
@@ -240,8 +256,11 @@ export namespace Variable {
                     scopeNode = getScopeOfDatabase(currentNode);
                     console.log(`db variable scope: ${JSON.stringify(scopeNode, AST.removeParentAndChildren, 2)}`);
                 } else {
+                    console.log(`doing normal scope!`);
                     scopeNode = getScopeOfDef(currentNode, currentNode);
                 }
+
+                console.log(`scope for var def: ${varName}, ${JSON.stringify(scopeNode, AST.removeParentAndChildren, 2)}`);
                 let varDefNode = {
                     variableDefinition: currentNode,
                     scope: scopeNode

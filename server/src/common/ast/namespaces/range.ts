@@ -4,6 +4,57 @@ import { Function } from "./function";
 
 export namespace RangeReplacer {
 
+    // export function AdjustRangeFromInsideXML(node: AST.ASTNode, documentText: string): AST.ASTNode{
+    //     let XML_Ranges = AST.xmlParser.extractXMLRanges(node);
+    //     for(const range of XML_Ranges){
+    //         if(AST.isInRange(node.range, range)){
+    //             node.range = AST.xmlParser.adjustRanges(node, documentText, node.type);
+    //         }
+    //     }
+    //     return node;
+    // }
+
+    export function AdjustRangesInsideXML(
+        all_tokens: {node: AST.ASTNode, type:number}[], 
+        documentText: string,
+        ast: AST.ASTNode): {node: AST.ASTNode, type:number}[]{
+
+        let XML_Ranges = AST.xmlParser.extractXMLRanges(ast);
+        
+        console.log(`XML_RANGES: ${JSON.stringify(XML_Ranges, null, 2)}`);
+
+
+        for(let node of all_tokens){
+            console.log(`node RIGHT NOW: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
+            let is_inside_xml = false;
+            for(const range of XML_Ranges){
+              if(AST.isInRange(node.node.range, range)){
+                is_inside_xml = true;
+                break;
+              }
+            }
+            if(
+              is_inside_xml === true && 
+              node.type !== 23 &&
+              node.type !== 24 &&
+              node.type !== 25
+            ){
+              console.log("Is inside XML, so calling adjust Ranges!");
+              console.log(`node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
+              node.node.range = AST.xmlParser.adjustRanges(node.node, documentText!, node.type);
+        
+            } else {
+                console.log(`node AFTER: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
+
+              continue;
+            }
+            console.log(`node AFTER: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
+
+          }
+
+        return all_tokens;
+    }
+
     function createNewASTNode(node: AST.ASTNode, range: Range): AST.ASTNode{
         return {
             type: node.type,
@@ -44,6 +95,7 @@ export namespace RangeReplacer {
                     Position.create(range.start.line, range.end.character)
                 );
                 AdjustedNodes.push(createNewASTNode(ast, projRange));
+                break;
             case 27:
                 const funNameUnused = Function.getNameFromFun(ast);
                 const hasSigUnused = Function.hasSignature(ast);
@@ -111,8 +163,8 @@ export namespace RangeReplacer {
             value: node.value,
             children: node.children,
             range: Range.create(
-                Position.create(node.range.start.line-2, node.range.start.character-1),
-                Position.create(node.range.end.line-2, node.range.end.character-1)
+                Position.create(node.range.start.line-2, node.range.start.character-2),
+                Position.create(node.range.end.line-2, node.range.end.character-2)
             ),
             parent: node.parent
         } as AST.ASTNode;
@@ -124,8 +176,8 @@ export namespace RangeReplacer {
         return {
             uri: location.uri,
             range: Range.create(
-                Position.create(location.range.start.line-2, location.range.start.character-1),
-                Position.create(location.range.end.line-2, location.range.end.character-1)
+                Position.create(location.range.start.line-2, location.range.start.character-2),
+                Position.create(location.range.end.line-2, location.range.end.character-2)
             )
         };
     }
@@ -134,11 +186,11 @@ export namespace RangeReplacer {
         return {
             start: {
                 line: range.start.line-2,
-                character: range.start.character-1
+                character: range.start.character-2
             },
             end: {
                 line: range.end.line-2,
-                character: range.end.character-1
+                character: range.end.character-2
             }
         };
     }

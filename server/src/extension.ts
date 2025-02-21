@@ -927,15 +927,17 @@ export class LanguageServer {
       console.log("[OnRequestFull] Couldn't get AST");
       return;
     }
+    console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
+
     try{
     const node = new LSPFeatureHandler(ast, params.textDocument.uri);
     let SemanticTokensNew = node.BuildSemanticTokensFull(documentText!);
     node.PrintAllFunVarRefNDef();
-    console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
     
 
     if(env === ENV_MODE.FAST) {
       console.log(`[onRequestFull] Fast mode results: ${Array.from(SemanticTokensNew!.data)}`);
+
       return SemanticTokensNew;
     }
   } catch (e){

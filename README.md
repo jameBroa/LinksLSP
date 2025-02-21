@@ -48,6 +48,13 @@ Calling out known issues can help limit users opening duplicate issues against y
 
 ## Release Notes
 
+### 21/09/25
+- Reworked entire XML Semantic process w/ new AST pipeline
+- XML Semantic highlighting supports Formlets AND Blocks (see imgs below)
+<img width=320 src="./repo_resources/imgs/semantic_highlighting_formlets.png" alt="Semantic highlighting with formlets"/> 
+<img width=480 src="./repo_resources/imgs/semantic_highlighting_blocks_within_xml.png" alt="Semantic highlighting of blocks within xml"/>
+
+
 ### 16/02/25
 - Finished reworking whole pipeline with SemanticTokens finished
 - All tests are passing

@@ -6,6 +6,7 @@ import { AssertionError } from "assert";
 import { create } from "domain";
 import { get, remove } from "lodash";
 import { LinksParserConstants } from "../constants";
+import { Function } from "./namespaces/function";
 export namespace AST {
 
     export interface ASTNode {
@@ -2188,6 +2189,7 @@ export namespace AST {
             const lines = documentContent.split("\n");
             console.log(`[adjustRanges] in here for tokentype: ${tokenType}`);
             let lineIndex = node.range.start.line-2;
+            console.log(`lineIndex: ${lineIndex}`);
 
             switch(tokenType){
                 case 8:
@@ -2212,6 +2214,21 @@ export namespace AST {
                     );
                     console.log(`[XML] Adjusted range for ${unusedVarName}: ${JSON.stringify(newRangeUnusedVar)}`);
                     return newRangeUnusedVar;
+                case 19:
+                    // Constant strings
+                    console.log("INSIDE STRING CONSTANTS!!!!!!!");
+                    let str_regex = new RegExp(`CommonTypes\\.Constant\\.String\\s*"([^"]*)"`);
+                    let str_match = str_regex.exec(node.value);
+                    let str_contents = `\"${str_match![1]}\"`;
+                    let escaped_str_contents = str_contents.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    
+                    let str_contents_regex = new RegExp(escaped_str_contents);
+                    let str_contents_match = str_contents_regex.exec(lines[lineIndex]);
+                    let new_str_pos = Range.create(
+                        Position.create(node.range.start.line, str_contents_match!.index+1),                        
+                        Position.create(node.range.start.line, str_contents_match!.index+1+str_contents.length),
+                    );
+                    return new_str_pos;
                 case 27:
                     let unusedFunName = variableParser.getName(node);
                     let unfunRegex = new RegExp(`${unusedFunName}`, 'g');
@@ -2232,6 +2249,16 @@ export namespace AST {
                     );
                     console.log(`[XML] Adjusted range for ${usedFunName}: ${JSON.stringify(newRangeUsedFun)}`);
                     return newRangeUsedFun;
+                case 29:
+                    let functionCallName = Function.getNameFromFun(node);
+                    let funcallRegex = new RegExp(`${functionCallName}`, 'g');
+                    let FunCallMatch = funcallRegex.exec(lines[lineIndex]);
+                    let newRangeFunCall =  Range.create(
+                        Position.create(node.range.start.line, FunCallMatch!.index+1),
+                        Position.create(node.range.start.line, FunCallMatch!.index+1 + functionCallName.length)
+                    );
+                    console.log(`[XML] Adjusted range for ${functionCallName}: ${JSON.stringify(newRangeFunCall)}`);
+                    return newRangeFunCall;
             }
 
             // Return null for now.

@@ -42,6 +42,8 @@ function SortTokens(
 
 function CreateBuilder(all_tokens: {node: AST.ASTNode, type:number}[], builder: SemanticTokensBuilder, documentText: string){
     for(const {node, type} of all_tokens){
+        console.log(`[semanticTokens] node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
+        console.log(`for type: ${type}`);
         let AdjustedNode: AST.ASTNode = RangeReplacer.AdjustRangeAsAST(node);
         let AdjustedNodes: AST.ASTNode[] = RangeReplacer.AdjustByTypeByAST(AdjustedNode, type, documentText);
         console.log(`[semanticTokens] AdjustedNodes: ${JSON.stringify(AdjustedNodes, AST.removeParentAndChildren, 2)}`);
@@ -68,17 +70,18 @@ export function ParseSemanticTokensFull(
     ast: AST.ASTNode,
     documentText: string
 ): SemanticTokens{
-
+    console.log("starting extraction...");
+    
     const unused_variables = ExtractUnusedVariables(variableReferences, variableDefinitions, variableRefToDef);
     const used_variables = ExtractUsedVariables(variableReferences, variableDefinitions, variableRefToDef);
     const {all_constants, projections, xml} = ExtractConstantsAndProjectionsAndXML(ast);
-    const string_constants = ExtractStringConstants(all_constants);
+    // const string_constants = ExtractStringConstants(all_constants);
+    const string_constants:AST.ASTNode[] = [];
     const num_constants = ExtractNumConstants(all_constants);    
     const unused_functions = ExtractUnusedFunctions(functionReferences, functionDefinitions);
     const {used_functions, function_calls} = ExtractUsedFunctions(functionReferences, functionDefinitions, unused_functions);
     const {xml_declarations, xml_tags, xml_attributes} = ExtractXML(xml, documentText);
-  
-    const all_tokens = SortTokens(
+    let all_tokens = SortTokens(
         unused_variables,
         used_variables,
         string_constants,
@@ -91,6 +94,32 @@ export function ParseSemanticTokensFull(
         xml_tags, 
         xml_attributes
     );
+
+    // // optimisation for later, take xml from earlier, take is ranges, and pass that in AdjustRangesInsideXML
+    // try{
+    //     all_tokens = RangeReplacer.AdjustRangesInsideXML(all_tokens, documentText, ast);
+    // } catch (e){
+    //     console.log("[error]", e);
+    // }
+
+    // // Call it again since RangeReplacer will have changed the ranges
+    // all_tokens = SortTokens(
+    //     unused_variables,
+    //     used_variables,
+    //     string_constants,
+    //     num_constants,
+    //     projections,
+    //     unused_functions,
+    //     used_functions,
+    //     function_calls, 
+    //     xml_declarations, 
+    //     xml_tags, 
+    //     xml_attributes
+    // );
+
+
+    console.log(`[semanticTokens] all_tokens: ${JSON.stringify(all_tokens, AST.removeParentAndChildren, 2)}`);
+
     let builder = new SemanticTokensBuilder();
     CreateBuilder(all_tokens, builder, documentText);
     return builder.build();
