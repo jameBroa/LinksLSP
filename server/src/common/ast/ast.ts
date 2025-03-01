@@ -7,6 +7,8 @@ import { create } from "domain";
 import { get, remove } from "lodash";
 import { LinksParserConstants } from "../constants";
 import { Function } from "./namespaces/function";
+import { ExtractStringFromStrConstant } from "./namespaces/shared";
+import { countReset } from "console";
 export namespace AST {
 
     export interface ASTNode {
@@ -32,10 +34,325 @@ export namespace AST {
         }
     }
 
+    function fixNewLine(node: ASTNode): void {
+        
+        function traverse(currentNode: ASTNode){
+            if(currentNode.parent !== null && 
+                currentNode.parent.value.substring(0, 9) === "Attribute" ) {
+                console.log(`[currentChildren]: ${JSON.stringify(currentNode.parent.children!, AST.removeParentAndChildren, 2)}`);
+
+
+                let target_idx = 0;
+
+                for(let i =0;i < currentNode.parent.children!.length; i++){
+                    if(currentNode === currentNode.parent.children![i]){
+                        target_idx = i;
+                        break;
+                    }
+                }
+
+                let contents = ExtractStringFromStrConstant(currentNode.value);
+                contents = contents.replace(/\\n/g, '\n');
+
+                let content_split_by_newline = contents.split("\n");
+                let new_children: ASTNode[] = [];
+                if(content_split_by_newline.length > 0){
+                    for(let i = 0; i < content_split_by_newline.length; i++){
+                        let content = content_split_by_newline[i];
+                        if(i === 0){
+                            new_children.push({
+                                type: "Leaf",
+                                value: `Constant: "${content}"`,
+                                range: Range.create(
+                                    Position.create(currentNode.range.start.line, currentNode.range.start.character-1),
+                                    Position.create(currentNode.range.start.line, currentNode.range.start.character + content.length+1)
+                                ),
+                                parent: currentNode.parent,
+                                children: currentNode.children
+                            });
+                        } else {
+                            let leading_whitespace = content.match(/^\s*/);
+                            new_children.push({
+                                type: "Leaf",
+                                value: `Constant: "${content}"`,
+                                range: Range.create(
+                                    Position.create(currentNode.range.start.line+i, leading_whitespace![0].length+2),
+                                    Position.create(currentNode.range.start.line+i, content.length+3)
+                                ),
+                                parent: currentNode.parent
+                            });
+                        }
+                    }
+                    console.log(`[ast.fixAST] ${JSON.stringify(new_children, removeParentAndChildren, 2)}`);
+                    let new_temp = [
+                        ...currentNode.parent.children!.slice(-1, target_idx), 
+                        ...new_children, 
+                        ...currentNode.parent.children!.slice(target_idx, currentNode.parent.children!.length)
+                    ];
+
+                    currentNode.parent!.children = new_temp;
+                }
+            }
+            if(currentNode.children){
+                for(const child of currentNode.children){
+                    traverse(child);
+                }
+            }
+        }
+        
+        traverse(node);
+    }
+
+    function fixExpr(node: ASTNode): void {
+        function traverse(currentNode: ASTNode){
+
+            if(currentNode.value === "Expr" && currentNode.parent!.children![0] === currentNode){
+                // Fix ranges for Expr
+                console.log(`[fixing expr for]: ${currentNode.parent!.value}`);
+                let maxLine = Number.MIN_SAFE_INTEGER;
+                let maxChar = Number.MIN_SAFE_INTEGER;
+                function getMaxPos(currNode: ASTNode): void{
+
+                    if(currNode.range.end.line > maxLine){
+                        maxLine = currNode.range.end.line;
+                        maxChar = currNode.range.end.character;
+                    } else if(currNode.range.end.line === maxLine && currNode.range.end.character > maxChar){
+                        maxChar = currNode.range.end.character;
+                    } 
+
+                    if(currNode.children){
+                        for(const child of currNode.children){
+                            getMaxPos(child);
+                        }
+                    }
+                }
+                getMaxPos(currentNode);
+                console.log(`max pos for eldest sibling: ${maxLine}, ${maxChar}`);
+                currentNode.range.end = Position.create(maxLine, maxChar);
+                console.log(`[fixing expr for]: ${currentNode.children![0].value}`);
+                
+                function getConstant(input: string): string{
+                    return input.substring(11, input.length-2);
+                }
+                // currentNode.children![0].value = `Constant: ${getConstant(currentNode.children![0].value)}`;
+
+
+                let siblings = currentNode.parent!.children!;
+                for(let i = 1; i < siblings.length; i++){
+                    let curr_expr = siblings[i];
+                    curr_expr.range.start = Position.create(maxLine, maxChar+1);
+                    if(curr_expr.children![0].value === "Block"){
+                        // getMaxPos(curr_expr);
+                        // curr_expr.range.end = Position.create(maxLine, maxChar);
+                        // continue;
+                    } else if(curr_expr.children![0].value.substring(0,9) === "Constant:"){
+                        // update position information for children
+                        let expr_child = curr_expr.children![0];
+                        expr_child.range.start = Position.create(maxLine, maxChar+1);
+                        let getContent = getConstant(expr_child.value);
+                        // expr_child.value = `Constant: "${getContent}"`;
+                        expr_child.range.end = Position.create(maxLine, maxChar+1+getContent.length);
+
+                        getMaxPos(curr_expr);
+                        curr_expr.range.end = Position.create(maxLine, maxChar);
+                    } 
+                }
+            }
+
+
+
+
+            if(currentNode.children){
+                for(const child of currentNode.children){
+                    traverse(child);
+                }
+            }
+        }
+        traverse(node);
+    }
+
+    function getNextNode(node: ASTNode): ASTNode | null{
+        // If node has no parent, it's the root - no "next" node
+        if (!node.parent) {
+            return null;
+        }
+        
+        let siblings = node.parent.children!;
+        for (let i = 0; i < siblings.length; i++) {
+            if (siblings[i] === node) {
+                // If this is not the last child, return next sibling
+                if (i < siblings.length - 1) {
+                    return siblings[i+1];
+                }
+                // Otherwise, we need to go up the tree
+                break;
+            }
+        }
+        
+        // Current node is the last child of its parent
+        // Traverse up the tree until we find a parent with a next sibling
+        let current = node.parent;
+        while (current.parent) {
+            const parentSiblings = current.parent.children!;
+            for (let i = 0; i < parentSiblings.length; i++) {
+                if (parentSiblings[i] === current) {
+                    // If this is not the last child, return next sibling
+                    if (i < parentSiblings.length - 1) {
+                        return parentSiblings[i+1];
+                    }
+                    // Otherwise, continue going up
+                    break;
+                }
+            }
+            current = current.parent;
+        }
+        
+        // If we've reached the root and haven't found a next node, 
+        // we're at the end of the AST
+        return null;
+        
+    }
+
+    function adjustContents(node: ASTNode): void {
+        function traverse(currentNode: ASTNode){
+            if(currentNode.value.substring(0, 9) === "Attribute"){
+
+                let attr_children = currentNode.children;
+                // check if num of children which aren't Constant is greater than 0
+                if(attr_children){
+                    for(let i = 0; i < attr_children.length; i++){
+                        let child = attr_children[i];
+                        if(child.value.substring(0,9) === "Constant:"){
+                            let newStart: Position | null = null;
+                            let newEnd: Position | null = null;
+                            
+                            // Generate start
+                            if(i === 0){
+                                newStart = Position.create(
+                                    currentNode.range.end.line,
+                                    currentNode.range.end.character+1
+                                );
+                            } else {
+                                let elderSibling = attr_children[i-1];
+                                newStart = Position.create(
+                                    elderSibling.range.end.line,
+                                    elderSibling.range.end.character+1
+                                );
+                            }
+
+                            // Generate end
+                            if(i === attr_children.length-1){
+                                let nextNode = getNextNode(currentNode);
+                                if(nextNode){
+                                    newEnd = Position.create(
+                                        nextNode.range.start.line,
+                                        nextNode.range.start.character-1
+                                    );
+                                }
+                            } else {
+                                let youngerSibling = attr_children[i+1];
+                                newEnd = Position.create(
+                                    youngerSibling.range.start.line,
+                                    youngerSibling.range.start.character-1
+                                );
+                            }
+                            if(newStart && newEnd !== null){
+                                child.range = Range.create(newStart, newEnd);
+                            }
+                        }
+                    }
+
+                }
+            }
+            if(currentNode.children){
+                for(const child of currentNode.children){
+                    traverse(child);
+                }
+            }
+        }
+        traverse(node);
+    }
+
+    function adjustContentForNewLines(node: AST.ASTNode): void{
+        function traverse(currentNode: AST.ASTNode) {
+
+            if(currentNode.value.substring(0,9) === "Attribute") {
+                let attr_children = currentNode.children;
+                if(attr_children){
+                    let new_children: ASTNode[] = [];
+                    for(let i = 0; i < attr_children.length; i++){
+                        let curr_child = attr_children[i];
+                        if(curr_child.value.substring(0,9) === "Constant:"){
+                            let contents = ExtractStringFromStrConstant(curr_child.value);
+                            contents = contents.replace(/\\n/g, '\n');
+                            let content_split_by_newline = contents.split("\n");
+                            const num_new_lines = content_split_by_newline.length;
+                            for(let j = 0; j < num_new_lines; j++){
+                                let curr_content = content_split_by_newline[j];
+                                if(j === 0){
+                                    new_children.push({
+                                        type:"Leaf",
+                                        value: `Constant: "${curr_content}"`,
+                                        range: Range.create(
+                                            Position.create(
+                                                curr_child.range.start.line+j,
+                                                curr_child.range.start.character
+                                            ),
+                                            Position.create(
+                                                curr_child.range.start.line+j,
+                                                curr_child.range.start.character+curr_content.length+1
+                                            )
+                                        ),
+                                        parent: currentNode
+
+                                    } as AST.ASTNode);
+                                }  else {
+                                    let leading_whitespace = curr_content.match(/^\s*/);
+
+                                    new_children.push({
+                                        type:"Leaf",
+                                        value: `Constant: "${curr_content}"`,
+                                        range: Range.create(
+                                            Position.create(
+                                                curr_child.range.start.line+j,
+                                                leading_whitespace![0].length
+                                            ),
+                                            Position.create(
+                                                curr_child.range.start.line+j,
+                                                curr_content.length+2
+                                            )
+                                        ),
+                                        parent: currentNode
+
+                                    } as AST.ASTNode);
+                                }
+                            }
+                        } else {
+                            new_children.push(curr_child);
+                        }
+                    }
+                    currentNode.children = new_children;
+                }
+            }
+
+
+
+            if(currentNode.children){
+                for(const child of currentNode.children){
+                    traverse(child);
+                }
+            }
+        }
+        traverse(node);
+    }
+   
     export function fromJSON(json_str: string, original_code: string): ASTNode {
         const parsed = JSON.parse(json_str);
         try{
             const ast: ASTNode = parseAST(parsed, original_code);
+            adjustContents(ast);
+            adjustContentForNewLines(ast);
+
             return ast;
         } catch (e){
             console.log(e, "E MESSAGE!");

@@ -21,7 +21,7 @@ function CreateUndefinedVariableDiagnostics(
         if(refs){
             for(const ref of refs){
                 let defOfRef = variableRefToDef.get(ref.variable);
-                if(defOfRef === undefined){
+                if(defOfRef === undefined && !LinksParserConstants.LINKS_VARS.has(key)){
                     UndefinedVariableDiagnostic.push(
                         {
                             node: ref.variable,
@@ -37,8 +37,9 @@ function CreateUndefinedVariableDiagnostics(
     return UndefinedVariableDiagnostic;
 }
 
-function GetVarsDefinedInSameScope(Definitions: VariableNodeDef[], map: Map<Position, AST.ASTNode[]>): void {
+function GetVarsDefinedInSameScope(Definitions: VariableNodeDef[], map: Map<Position, AST.ASTNode[]>, key: string): void {
     for(const def of Definitions){
+        console.log(`[LinksNode] def: "${JSON.stringify(def, AST.removeParentAndChildren, 2)}"`);
         if(map.has(def.scope.range.end)){
             map.set(
                 def.scope.range.end, 
@@ -74,7 +75,7 @@ function CreateMultipleVariableDefinitionsDiagnostic(
         let Definitions = variableDefinitions.get(key);
         let DefinitionsInSameScope: Map<Position, AST.ASTNode[]> = new Map();
         if(Definitions) {
-            GetVarsDefinedInSameScope(Definitions, DefinitionsInSameScope);
+            GetVarsDefinedInSameScope(Definitions, DefinitionsInSameScope, key);
         }
         DetermineDuplicateVarsInScope(
             DefinitionsInSameScope, 

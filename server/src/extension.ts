@@ -73,6 +73,8 @@ export interface TableColumn {
   dataType: string
 }
 
+let lastAst: AST.ASTNode | null = null;
+
 
 export class LanguageServer {
   public connection: Connection;
@@ -189,7 +191,8 @@ export class LanguageServer {
                 "projections",
                 "unusedFunction",
                 "usedFunction",
-                "functionCall"
+                "functionCall",
+                "variant"
               ],
               tokenModifiers: []
             },
@@ -904,7 +907,6 @@ export class LanguageServer {
   
 
   public async onRequestFull(params: any) {
-    const release = await this.mutex.acquire();
     try {
     console.log(`[onRequestFull] called`);
     let ast;
@@ -925,8 +927,14 @@ export class LanguageServer {
 
     if(!ast){
       console.log("[OnRequestFull] Couldn't get AST");
-      return;
+      if(lastAst === null){
+        return;
+      }
+      ast = lastAst;
+    } else {
+      lastAst = ast;
     }
+    
     console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
 
     try{
@@ -1180,7 +1188,6 @@ export class LanguageServer {
   } catch (e) {
     console.error(`[onRequestFull] Error: ${e}`);
   } finally {
-    release();
     await this.validateTextDocument(params.textDocument);
     
   }
@@ -1215,7 +1222,11 @@ export class LanguageServer {
 }
 
 const server = new LanguageServer();
+try{
 server.start();
+} catch (e){
+  console.error(`[LanguageServer] Error: ${e}`);
+}
 
 // Fun position: {"start": {"line": 2, "col": 1}, "finish": {"line": 4, "col": 2}}
 // Val position: {"start": {"line": 2, "col": 1}, "finish": {"line": 2, "col": 10}}

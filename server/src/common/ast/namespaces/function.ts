@@ -24,6 +24,16 @@ export namespace Function{
             );
         }
 
+        export function isInCase(node: AST.ASTNode): boolean {
+            return (node.type === "Leaf" &&
+                node.parent !== null &&
+                node.parent.parent !== null &&
+                node.parent.value === "Variant" && 
+                node.parent.parent.value === "Case statement" &&
+                node.parent.children![0] === node
+            );
+        }
+
 
         export function isFunctionReference(node: AST.ASTNode): boolean {
             if(node.parent){
@@ -33,7 +43,7 @@ export namespace Function{
                         node.children![0].value.substring(0, 9) === "Variable:"
                     ) || isFunctionReferenceInFormBinding(node)
                     || isFormletPlacement(node)
-                    
+                    // || isInCase(node)
                 );
             }
             return false;
@@ -59,6 +69,10 @@ export namespace Function{
                 node.value === "Fun" && 
                 node.children![0].value.split(" ")[1] === "dummy_wrapper"
             );
+        }
+
+        export function isInMutual(node: AST.ASTNode){
+            return (node.parent!.value === "Funs");
         }
     }
 
@@ -148,11 +162,35 @@ export namespace Function{
         function traverse(currentNode: AST.ASTNode){
             if(FunctionConditions.isFunctionDefinition(currentNode)){
                 let functionName = getNameFromFun(currentNode);
-                let scopeNode = getScopeOfDef(currentNode, currentNode.parent!);
-                let functionDefinitionNode = {
-                    functionDefinition: currentNode,
-                    scope: scopeNode
-                } as FunctionNodeDef;
+                let scopeNode: AST.ASTNode;
+                let functionDefinitionNode: FunctionNodeDef;
+                if(FunctionConditions.isInMutual(currentNode)){
+                    let FunsNode = currentNode.parent!;
+                    let suggestedScope = getScopeOfDef(currentNode, currentNode.parent!);
+                    // scopeNode = getScopeOfDef(currentNode.parent!, currentNode.parent!);
+                    let newScopeNode = {
+                        type: suggestedScope.type,
+                        value: suggestedScope.value,
+                        range: Range.create(
+                            FunsNode.range.start,
+                            suggestedScope.range.end
+                        ),
+                        parent: currentNode.parent,
+                        children: currentNode.parent?.children
+                    };
+
+                    functionDefinitionNode = {
+                        functionDefinition: currentNode,
+                        scope: newScopeNode
+                    } as FunctionNodeDef;
+
+                } else {
+                    scopeNode = getScopeOfDef(currentNode, currentNode.parent!);
+                    functionDefinitionNode = {
+                        functionDefinition: currentNode,
+                        scope: scopeNode
+                    } as FunctionNodeDef;
+                }
                 addToXNode(definitions, functionName, functionDefinitionNode);
                 // addToDefinitions(definitions, functionName, currentNode);
             }
@@ -184,6 +222,7 @@ export namespace Function{
                 let funNode: AST.ASTNode = currentNode;
 
                 if(FunctionConditions.isFunctionReferenceInFormBinding(currentNode)){
+                    console.log(`inside form binding`);
                     funName = Variable.getName(currentNode);
                     scopeNode = currentNode.parent!;
                     let newRange = Range.create(
@@ -218,7 +257,29 @@ export namespace Function{
                         scopeNode.range.end
                     );
                     funNode = CreateFnApplNode(currentNode, newRange, scopeNode);
-                } else {
+                } 
+                // else if (FunctionConditions.isInCase(currentNode)) {
+                //     console.log(`[fun.isincase: ] ${JSON.stringify(currentNode, AST.removeParentAndChildren, 2)}`);
+                //     console.log(currentNode.value);
+                //     funName = currentNode.value;
+                //     scopeNode = currentNode.parent!;
+                //     // let newRange = Range.create(
+                //     //     currentNode.range.start,
+                //     //     Position.create(currentNode.range.start.line, currentNode.range.start.character+funName.length),
+                //     // );
+                //     let newNode = {
+                //         type: currentNode.type,
+                //         value: `Variable: ${funName}`,
+                //         range: currentNode.range,
+                //         parent: currentNode.parent,
+                //         children: currentNode.children
+                //     } as AST.ASTNode;
+                //     console.log(`[Fun.isInCase] funName: ${funName}`);
+                //     // console.log(`[Fun.isInCase] newRange: ${JSON.stringify(newRange)}`);
+                //     funNode = CreateFnApplNode(newNode, scopeNode.range, scopeNode);
+
+                // }
+                else {
                     funName = getNameFromFnAppl(currentNode);
                     scopeNode= getScope(currentNode, currentNode);
                     funNode = currentNode;

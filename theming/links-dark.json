@@ -72,7 +72,7 @@
     {
       "scope":"xmlAttribute.links",
       "settings":{
-        "foreground":"#9CDCFE"
+        "foreground":"#569CD6"
       }
     },
     {
@@ -109,6 +109,12 @@
       "scope":"unusedFunction.links",
       "settings": {
         "foreground": "#9a9e82"
+      }
+    },
+    {
+      "scope":"variant.links",
+      "settings": {
+        "foreground": "#67ad66"
       }
     }
     

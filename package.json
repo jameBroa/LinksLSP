@@ -128,6 +128,10 @@
       {
         "id":"functionCall",
         "description": "Links Function Call"
+      },
+      {
+        "id":"variant",
+        "description": "Links Variant"
       }
     ],
     "semanticTokenScopes": [
@@ -166,6 +170,9 @@
           ],
           "functionCall":[
             "functionCall.links"
+          ],
+          "variant":[
+            "variant.links"
           ]
           
         }

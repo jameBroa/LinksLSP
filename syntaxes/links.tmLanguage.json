@@ -27,9 +27,10 @@
           "match": ";",
           "name": "statement.end.links"
       },
+
       {
-          "match": "\"([^\"\\\\]|\\\\.)*\"",
-          "name": "string.quoted.double.links"
+        "match": "\"",
+        "name": "string.quoted.double.links"
       },
 
       {

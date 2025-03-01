@@ -197,10 +197,11 @@ export function ExtractProjections(): AST.ASTNode[]{
     return Projections;
 }
 
-export function ExtractConstantsAndProjectionsAndXML(ast: AST.ASTNode): {all_constants: AST.ASTNode[], projections: AST.ASTNode[], xml: AST.ASTNode[]} {
+export function ExtractConstantsAndProjectionsAndXML(ast: AST.ASTNode): {all_constants: AST.ASTNode[], projections: AST.ASTNode[], xml: AST.ASTNode[], variants: AST.ASTNode[]} {
     let AllConstants: AST.ASTNode[] = [];
     let Projections: AST.ASTNode[] = [];
     let XMLNodes: AST.ASTNode[] = [];
+    let Variants: AST.ASTNode[] = [];
     function traverse(currentNode: AST.ASTNode){
 
         if(currentNode.type === "Leaf" && currentNode.value.substring(0,9) === "Constant:"){
@@ -214,10 +215,26 @@ export function ExtractConstantsAndProjectionsAndXML(ast: AST.ASTNode): {all_con
             XMLNodes.push(currentNode);
         }
 
+        if(currentNode.value === "Variant"){
+            let child = currentNode.children![0];
+            let adjustedVariant = {
+                type: child.type,
+                value: child.value,
+                range: Range.create(
+                    child.range.start,
+                    Position.create(child.range.start.line, child.range.start.character+child.value.length)
+                ),
+                parent: currentNode.parent,
+                children: currentNode.children
+
+            } as AST.ASTNode;
+            Variants.push(adjustedVariant);
+        }
+
         traverseASTFull(currentNode, traverse);
     }
     traverse(ast);
-    return {"all_constants": AllConstants, "projections": Projections, "xml": XMLNodes};
+    return {"all_constants": AllConstants, "projections": Projections, "xml": XMLNodes, "variants": Variants};
 }
 
 
@@ -402,14 +419,18 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
         let siblings = node.parent!.children!;
 
         let remove_attr_siblings = siblings.filter((node) => {
-            return node.value.substring(0,9) !== "Attribute";
+            return node.value.substring(0,9) !== "Attribute" && node.value !== "Xml";
         });
+
+        console.log(`all siblings w/o attr and xml ${node.value}, ${JSON.stringify(remove_attr_siblings, AST.removeParentAndChildren, 2)}`);
+
 
         // Basically xml that's not declared like this: <test/>
         if(remove_attr_siblings.length > 1){
             let desired_sibling = remove_attr_siblings[1];
             console.log(`desired_sibling ${node.value}, ${JSON.stringify(desired_sibling, AST.removeParentAndChildren, 2)}`);
             let self_closing = IsOpenAndCloseXMLTag(desired_sibling, documentText);
+            console.log(`self_closing ${self_closing}`);
             CreateTags(self_closing, node, desired_sibling, xml_tags);
 
         } else {
@@ -422,12 +443,13 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
         
     }
 
+    // to solve tag problem, just do regex on text to find everything w/ '>'
 
     for(const node of declarations){
         let siblings = node.parent!.children!;
 
         let remove_attr_siblings = siblings.filter((node) => {
-            return node.value.substring(0,9) !== "Attribute";
+            return node.value.substring(0,9) !== "Attribute" && node.value !== "Xml";
         });
         let desired_sibling: AST.ASTNode | null = null;
 
@@ -437,6 +459,7 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
             desired_sibling = remove_attr_siblings[0];
         }
         let self_closing = IsOpenAndCloseXMLTag(desired_sibling, documentText);
+        console.log(`for the actual xml node for ${node.value} is self_closing: ${self_closing}`);
         let str = split_by_line[node.range.end.line-2];
         let open_and_close = str.substring(str.length-2, str.length-1) === "/";
         let opening_node = {

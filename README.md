@@ -48,7 +48,14 @@ Calling out known issues can help limit users opening duplicate issues against y
 
 ## Release Notes
 
-### 21/09/25
+### 28/02/25
+- Cleaned up a lot of bugs
+- Solved problem with XML range information being incorrect for attributes defined by a multiline string
+
+<img width=320 src="./repo_resources/imgs/semantic_highlighting_multiline_str_with_blocks.png" alt="Semantic highlighting of an xml node with an attribute which is a multiline string with blocks">
+
+
+### 21/02/25
 - Reworked entire XML Semantic process w/ new AST pipeline
 - XML Semantic highlighting supports Formlets AND Blocks (see imgs below)
 <img width=320 src="./repo_resources/imgs/semantic_highlighting_formlets.png" alt="Semantic highlighting with formlets"/> 

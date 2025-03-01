@@ -15,7 +15,8 @@ function SortTokens(
     function_calls: AST.ASTNode[],
     xml_declarations: AST.ASTNode[], 
     xml_tags: AST.ASTNode[],
-    xml_attributes: AST.ASTNode[]
+    xml_attributes: AST.ASTNode[],
+    variants: AST.ASTNode[]
 ){
     return [
         ...used_variables.map(node => ({node, type: 8})),
@@ -29,6 +30,7 @@ function SortTokens(
         ...xml_declarations.map(node => ({node, type: 23})),
         ...xml_tags.map(node => ({node, type: 24})),
         ...xml_attributes.map(node => ({node, type: 25})),
+        ...variants.map(node => ({node, type: 30}))
     ].sort((a, b) => {
         if (!a.node.range || !b.node.range) {
           return 0;
@@ -74,9 +76,9 @@ export function ParseSemanticTokensFull(
     
     const unused_variables = ExtractUnusedVariables(variableReferences, variableDefinitions, variableRefToDef);
     const used_variables = ExtractUsedVariables(variableReferences, variableDefinitions, variableRefToDef);
-    const {all_constants, projections, xml} = ExtractConstantsAndProjectionsAndXML(ast);
-    // const string_constants = ExtractStringConstants(all_constants);
-    const string_constants:AST.ASTNode[] = [];
+    const {all_constants, projections, xml, variants} = ExtractConstantsAndProjectionsAndXML(ast);
+    const string_constants = ExtractStringConstants(all_constants);
+    // const string_constants:AST.ASTNode[] = [];
     const num_constants = ExtractNumConstants(all_constants);    
     const unused_functions = ExtractUnusedFunctions(functionReferences, functionDefinitions);
     const {used_functions, function_calls} = ExtractUsedFunctions(functionReferences, functionDefinitions, unused_functions);
@@ -92,7 +94,8 @@ export function ParseSemanticTokensFull(
         function_calls, 
         xml_declarations, 
         xml_tags, 
-        xml_attributes
+        xml_attributes,
+        variants
     );
 
     // // optimisation for later, take xml from earlier, take is ranges, and pass that in AdjustRangesInsideXML

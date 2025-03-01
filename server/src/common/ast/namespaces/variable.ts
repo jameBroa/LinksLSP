@@ -1,7 +1,7 @@
 import { Position, Range } from "vscode-languageserver";
 import { AST } from "../ast";
 import { LSPFeatureHandler, VariableNode, VariableNodeDef } from "../node";
-import { addToDefinitions, addToXNode, createScopeNode, createScopeNodeForDef, ExtractExactDefinition, RefDef, traverseASTByLevel, traverseASTFull } from "./shared";
+import { addToDefinitions, addToXNode, createScopeNode, createScopeNodeForDef, ExtractExactDefinition, ExtractStringFromStrConstant, RefDef, traverseASTByLevel, traverseASTFull } from "./shared";
 import { Function } from "./function";
 
 
@@ -9,7 +9,7 @@ export namespace Variable {
 
     export namespace VariableConditions {
         
-        function isFnAppl(node: AST.ASTNode): boolean{
+        export function isFnAppl(node: AST.ASTNode): boolean{
             if(node.parent){
                 return (
                     node.parent.value === "FnAppl"
@@ -19,7 +19,7 @@ export namespace Variable {
             }
         }
 
-        function isFunReference(node: AST.ASTNode): boolean {
+        export function isFunReference(node: AST.ASTNode): boolean {
             if(node.parent){
                 if(node.parent.value === "FnAppl"){
                     if(node.parent.children![0] === node){
@@ -35,7 +35,7 @@ export namespace Variable {
             }
         }
 
-        function isParameter(node: AST.ASTNode): boolean {
+        export function isParameter(node: AST.ASTNode): boolean {
             if(node.parent){
                 return node.parent.value === "NormalFunLit";
             } else {
@@ -43,18 +43,23 @@ export namespace Variable {
             }
         }
 
-        function isLeafAndVariable(node: AST.ASTNode): boolean {
+        export function isLeafAndVariable(node: AST.ASTNode): boolean {
             return (
                 node.type === "Leaf" && 
                 node.value.substring(0, 9) === "Variable:"
             );
         }
 
-        function hasValidParent(node: AST.ASTNode): boolean {
+        export function hasValidParent(node: AST.ASTNode): boolean {
             if(node.parent){
                 return (
-                    node.parent.value === "Val" ||
-                    node.parent.value === "NormalFunlit" ||
+                    (node.parent.value === "Val" && node.parent.children![0] === node) ||
+                    node.parent.value === "NormalFunlit" || 
+                    (
+                        node.parent.value === "Tuple" &&
+                        node.parent.parent && 
+                        node.parent.parent.value === "NormalFunlit"
+                    ) ||
                     (
                         node.parent.value === "FormBinding" &&
                         node.parent.children![1] === node
@@ -64,7 +69,7 @@ export namespace Variable {
             return false;
         }
 
-        function isFormlet(node: AST.ASTNode): boolean {
+        export function isFormlet(node: AST.ASTNode): boolean {
             if(node.parent){
                 return (
                     node.type === "Leaf" &&
@@ -95,7 +100,8 @@ export namespace Variable {
                 node.parent && 
                 node.parent.parent && 
                 node.parent.parent.value === "Iteration" &&
-                node.value.substring(0,9) === "Variable:" // Added this line
+                node.value.substring(0,9) === "Variable:" // Added this line 
+                && (node.parent.value !== "TupleLit" && node.parent.value !== "ListLit")
                 ){
                 if(node.parent.children![0] === node){
                     return true;
@@ -123,17 +129,39 @@ export namespace Variable {
                 node.parent.value === "Record");
         }
 
+        export function isInCase(node: AST.ASTNode): boolean {
+            return(node.type === "Leaf" &&
+                node.parent !== null &&
+                node.parent.parent !== null &&
+                node.parent.value === "Variant" && 
+                node.parent.parent.value === "Case statement" &&
+                node.parent.children![1] === node
+            );
+        }
+
+        export function isLName(node: AST.ASTNode): boolean {
+            return (node.type === "Leaf" &&
+                node.parent !== null &&
+                node.parent.parent !== null &&
+                node.parent.parent.value === "Attribute: l:name"
+            )
+        }
+
         export function isVariableDefinition(node: AST.ASTNode): boolean {
             return (
                 (
                     isLeafAndVariable(node) && 
                     !isFnAppl(node) &&
-                    hasValidParent(node)
+                    hasValidParent(node) 
+                    
                 ) 
                 || isIteration(node) 
                 || isDatabase(node)
                 || isRecord(node)
+                || isInCase(node)
+                || isLName(node)
             );
+           
         }
 
         export function hasNotReachedParentScope(node: AST.ASTNode): boolean {
@@ -142,6 +170,15 @@ export namespace Variable {
                 node.value !== "No Signature" &&
                 node.value !== "Signature" &&
                 node.parent !== null
+            );
+        }
+        
+        // backward propagation until we reach the parent Input node
+        export function hasReachedParentForm(node: AST.ASTNode): boolean{
+            return (
+                node.parent !== null &&
+                node.parent.value === "Xml" &&
+                node.parent.children![0].value === "form"
             );
         }
 
@@ -181,6 +218,26 @@ export namespace Variable {
             } else {
                 return currentScope;
             }
+        }
+    }
+
+    function getScopeForLName(varNode: AST.ASTNode, currentScope: AST.ASTNode) {
+        let inputCurrScope = currentScope;
+        console.log(`current pos (bef): ${JSON.stringify(currentScope, AST.removeParentAndChildren, 2)}`);
+
+        currentScope = currentScope.parent!;
+        while(!VariableConditions.hasReachedParentForm(currentScope)){
+
+            currentScope = currentScope.parent!;
+        }
+
+        currentScope = currentScope.parent!.children![0];
+
+        if(currentScope.value === "form"){
+            return currentScope;
+        } else {
+            // Return input scope if we can't find the input scope
+            return inputCurrScope;
         }
     }
 
@@ -239,34 +296,70 @@ export namespace Variable {
         return node.parent!;
     }
 
+    function getScopeOfCase(node: AST.ASTNode): AST.ASTNode {
+        console.log(`node: ${JSON.stringify(node.range, null, 2)}`);
+        let caseNode = node.parent!.parent!.parent!;
+        let caseContents = caseNode.children![1];
+        return caseContents.children![0];
+    }
+
     export function ExtractDefinitions(ast: AST.ASTNode): Map<string, VariableNodeDef[]> {
         let definitions = new Map<string, VariableNodeDef[]>();
 
         function traverse(currentNode: AST.ASTNode){
             let varName;
             if(VariableConditions.isVariableDefinition(currentNode)) {
+
+                console.log((
+                    VariableConditions.isLeafAndVariable(currentNode),
+                    !VariableConditions.isFnAppl(currentNode),
+                    VariableConditions.hasValidParent(currentNode)
+                ),
+                VariableConditions.isIteration(currentNode) ,
+                VariableConditions.isDatabase(currentNode),
+                VariableConditions.isRecord(currentNode),
+                VariableConditions.isInCase(currentNode)
+            );
+
                 varName = getName(currentNode);
                 // console.log(`found definition for: ${varName}`);
                 // console.log(`currentNode: ${JSON.stringify(currentNode, AST.removeParentAndChildren, 2)}`);
-                let scopeNode: AST.ASTNode;
+                let scopeNode: AST.ASTNode | null = null;
                 if(VariableConditions.isIteration(currentNode)){
+                    console.log(`found iteration variable! (${varName})`);
                     scopeNode = getScopeOfIteration(currentNode);
                 } else if (VariableConditions.isDatabase(currentNode)) {
                     console.log(`found db variable!`);
                     scopeNode = getScopeOfDatabase(currentNode);
                     console.log(`db variable scope: ${JSON.stringify(scopeNode, AST.removeParentAndChildren, 2)}`);
-                } else {
+                } else if (VariableConditions.isInCase(currentNode)) {
+                    console.log("found variable inside case");
+                    scopeNode = getScopeOfCase(currentNode);
+                
+                } else if (VariableConditions.isLName(currentNode)) {
+                    console.log(`[l:name] INSIDE`)
+                    varName = ExtractStringFromStrConstant(currentNode.value);
+                    let tempScopeNode = getScopeForLName(currentNode, currentNode);
+                    if(tempScopeNode !== currentNode){
+                        scopeNode = tempScopeNode;
+                    }
+
+
+                }else {
                     console.log(`doing normal scope!`);
                     scopeNode = getScopeOfDef(currentNode, currentNode);
                 }
 
                 console.log(`scope for var def: ${varName}, ${JSON.stringify(scopeNode, AST.removeParentAndChildren, 2)}`);
-                let varDefNode = {
-                    variableDefinition: currentNode,
-                    scope: scopeNode
-                } as VariableNodeDef;
 
-                addToXNode(definitions, varName, varDefNode);
+                if(scopeNode && varName){
+                    let varDefNode = {
+                        variableDefinition: currentNode,
+                        scope: scopeNode
+                    } as VariableNodeDef;
+
+                    addToXNode(definitions, varName, varDefNode);
+                }
                 // addToDefinitions(definitions, varName, currentNode);
             }
             traverseASTFull(currentNode, traverse);
