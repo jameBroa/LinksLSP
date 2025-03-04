@@ -39,7 +39,7 @@ function CreateUndefinedVariableDiagnostics(
 
 function GetVarsDefinedInSameScope(Definitions: VariableNodeDef[], map: Map<Position, AST.ASTNode[]>, key: string): void {
     for(const def of Definitions){
-        console.log(`[LinksNode] def: "${JSON.stringify(def, AST.removeParentAndChildren, 2)}"`);
+        // console.log(`[LinksNode] def: "${JSON.stringify(def, AST.removeParentAndChildren, 2)}"`);
         if(map.has(def.scope.range.end)){
             map.set(
                 def.scope.range.end, 
@@ -168,6 +168,15 @@ function CreateBaseDiagnostic(diagnostic: DiagnosticInfo): Diagnostic {
         source: 'LinksLSP'
     } as Diagnostic;
 }
+
+function CreateWarningDiagnostic(diagnostic: DiagnosticInfo): Diagnostic {
+    return {
+        severity: DiagnosticSeverity.Warning,
+        range: diagnostic.node.range,
+        message: diagnostic.firstMessage,
+        source: 'LinksLSP'
+    } as Diagnostic;
+}
 function AddExtraDiagnosticInfo(diagnosticInfo: DiagnosticInfo, diagnostic: Diagnostic, uri: string): void {
     diagnostic.relatedInformation = [
         {
@@ -184,7 +193,13 @@ function AddExtraDiagnosticInfo(diagnosticInfo: DiagnosticInfo, diagnostic: Diag
 function ProcessDiagnosticInfo(Diagnostics: DiagnosticInfo[], extraInfo: boolean, uri: string): Diagnostic[] {
     let ProcessedDiagnostics: Diagnostic[] = [];
     for(const diagnostic of Diagnostics) {
-        let currDiagnostic = CreateBaseDiagnostic(diagnostic);
+        let currDiagnostic: Diagnostic | null = null;
+        if(diagnostic.secondMessage.startsWith('Either remove the declaration(s)')) {
+            // Duplicate variables create warning, not error
+            currDiagnostic = CreateWarningDiagnostic(diagnostic);
+        } else {
+            currDiagnostic = CreateBaseDiagnostic(diagnostic);
+        }
         if(extraInfo){
             AddExtraDiagnosticInfo(diagnostic, currDiagnostic, uri);
         }

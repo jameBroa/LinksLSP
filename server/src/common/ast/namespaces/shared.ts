@@ -9,7 +9,12 @@ export type RefDef<T extends XNode = XNode> = {
     definitions: Map<string, AST.ASTNode[]>,
     references: Map<string, T[]>
 }
+// When the output is like this: "Constant: \"             height: \""
+export function ExtractStringFromConstant(input: string): string{
+    return input.substring(11, input.length-1);
+}
 
+// When the output is like this: "Constant: (CommonTypes.Constant.String \"n\")"
 export function ExtractStringFromStrConstant(input: string): string{
     let regex = new RegExp(`CommonTypes\\.Constant\\.String\\s*"([^"]*)"`);
     let match = regex.exec(input);
@@ -121,7 +126,7 @@ function ExtractVariablesByUsage(
                             }
                         } else {
                             if(AST.isInRange(varPos, scopeOfVarDef)){
-                                console.log(`found used variable ${key}`);  
+                                // console.log(`found used variable ${key}`);  
                                 variables.push(def.variableDefinition);
                                 // variables.push(ref.variable);
                                 break;
@@ -215,7 +220,7 @@ export function ExtractConstantsAndProjectionsAndXML(ast: AST.ASTNode): {all_con
             XMLNodes.push(currentNode);
         }
 
-        if(currentNode.value === "Variant"){
+        if(currentNode.value === "Variant" ){
             let child = currentNode.children![0];
             let adjustedVariant = {
                 type: child.type,
@@ -229,7 +234,20 @@ export function ExtractConstantsAndProjectionsAndXML(ast: AST.ASTNode): {all_con
 
             } as AST.ASTNode;
             Variants.push(adjustedVariant);
+        } else if (currentNode.parent !== null && currentNode.parent.value === "ConstructorLit" && currentNode.parent.children![0] === currentNode){
+            let adjustedVariant = {
+                type: "Leaf",
+                value: currentNode.value,
+                range: Range.create(
+                    currentNode.range.start,
+                    Position.create(currentNode.range.start.line, currentNode.range.start.character+currentNode.value.length)
+                ),
+                parent: currentNode.parent,
+                children: currentNode.children
+            } as AST.ASTNode;
+            Variants.push(adjustedVariant);
         }
+        
 
         traverseASTFull(currentNode, traverse);
     }
@@ -370,7 +388,7 @@ function CreateTags(isSelfClosing: boolean, node: AST.ASTNode, desired_sibling: 
     }
 }
 
-export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_declarations: AST.ASTNode[], xml_tags:AST.ASTNode[], xml_attributes: AST.ASTNode[] } {
+export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_declarations: AST.ASTNode[], xml_tags:AST.ASTNode[], xml_attributes: AST.ASTNode[], xml_text: AST.ASTNode[]} {
     let xml_declarations: AST.ASTNode[] = [];
     let xml_tags: AST.ASTNode[] = [];
     let xml_attributes: AST.ASTNode[] = [];
@@ -380,13 +398,13 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
 
     let split_by_line = documentText.split("\n");
 
-    console.log(`[ExtractXML] all_xml: ${JSON.stringify(all_xml, AST.removeParentAndChildren, 2)}`);
+    // console.log(`[ExtractXML] all_xml: ${JSON.stringify(all_xml, AST.removeParentAndChildren, 2)}`);
 
     xml_text = all_xml.filter((node) => {
         return node.value.substring(0, 9) === "TextNode:";
     });
 
-    console.log(`[ExtractXML] xml_text: ${JSON.stringify(xml_text, AST.removeParentAndChildren, 2)}`);
+    // console.log(`[ExtractXML] xml_text: ${JSON.stringify(xml_text, AST.removeParentAndChildren, 2)}`);
 
 
     let declarations = all_xml.filter((node) => {
@@ -395,7 +413,7 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
         } 
     });
 
-    console.log(`[ExtractXML] declarations: ${JSON.stringify(declarations, AST.removeParentField, 2)}`);
+    // console.log(`[ExtractXML] declarations: ${JSON.stringify(declarations, AST.removeParentField, 2)}`);
 
 
 
@@ -422,19 +440,19 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
             return node.value.substring(0,9) !== "Attribute" && node.value !== "Xml";
         });
 
-        console.log(`all siblings w/o attr and xml ${node.value}, ${JSON.stringify(remove_attr_siblings, AST.removeParentAndChildren, 2)}`);
+        // console.log(`all siblings w/o attr and xml ${node.value}, ${JSON.stringify(remove_attr_siblings, AST.removeParentAndChildren, 2)}`);
 
 
         // Basically xml that's not declared like this: <test/>
         if(remove_attr_siblings.length > 1){
             let desired_sibling = remove_attr_siblings[1];
-            console.log(`desired_sibling ${node.value}, ${JSON.stringify(desired_sibling, AST.removeParentAndChildren, 2)}`);
+            // console.log(`desired_sibling ${node.value}, ${JSON.stringify(desired_sibling, AST.removeParentAndChildren, 2)}`);
             let self_closing = IsOpenAndCloseXMLTag(desired_sibling, documentText);
-            console.log(`self_closing ${self_closing}`);
+            // console.log(`self_closing ${self_closing}`);
             CreateTags(self_closing, node, desired_sibling, xml_tags);
 
         } else {
-            console.log(`[remove_attr_siblings] ${node.value}: ${JSON.stringify(remove_attr_siblings, AST.removeParentAndChildren, 2)}`);
+            // console.log(`[remove_attr_siblings] ${node.value}: ${JSON.stringify(remove_attr_siblings, AST.removeParentAndChildren, 2)}`);
             let desired_sibling = remove_attr_siblings[0];
             let self_closing = IsOpenAndCloseXMLTag(desired_sibling, documentText);
             CreateTags(self_closing, node, desired_sibling, xml_tags);
@@ -459,7 +477,7 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
             desired_sibling = remove_attr_siblings[0];
         }
         let self_closing = IsOpenAndCloseXMLTag(desired_sibling, documentText);
-        console.log(`for the actual xml node for ${node.value} is self_closing: ${self_closing}`);
+        // console.log(`for the actual xml node for ${node.value} is self_closing: ${self_closing}`);
         let str = split_by_line[node.range.end.line-2];
         let open_and_close = str.substring(str.length-2, str.length-1) === "/";
         let opening_node = {
@@ -489,13 +507,13 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
         new_xml_declarations.push(opening_node);
     }
 
-    console.log(`[ExtractXML] new_xml_declarations: ${JSON.stringify(new_xml_declarations, AST.removeParentAndChildren, 2)}`);
+    // console.log(`[ExtractXML] new_xml_declarations: ${JSON.stringify(new_xml_declarations, AST.removeParentAndChildren, 2)}`);
 
     new_xml_attributes = all_xml.filter((node) => {
         return node.value.substring(0,9) === "Attribute";
     });
 
-    console.log(`[ExtractXML] new_xml_attributes: ${JSON.stringify(new_xml_attributes, AST.removeParentAndChildren, 2)}`);
+    // console.log(`[ExtractXML] new_xml_attributes: ${JSON.stringify(new_xml_attributes, AST.removeParentAndChildren, 2)}`);
 
 
     let xml_semantics = AST.xmlParser.extractSemantics(all_xml, documentText);
@@ -512,9 +530,9 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
         return node.value === "xmlAttribute";
     });
 
-    console.log(`[ExtractXML] xml_tags: ${JSON.stringify(xml_tags, AST.removeParentAndChildren, 2)}`);
+    // console.log(`[ExtractXML] xml_tags: ${JSON.stringify(xml_tags, AST.removeParentAndChildren, 2)}`);
 
-    return {xml_declarations:new_xml_declarations, xml_tags, xml_attributes:new_xml_attributes};
+    return {xml_declarations:new_xml_declarations, xml_tags, xml_attributes:new_xml_attributes, xml_text: xml_text};
 }
 
 
@@ -531,7 +549,7 @@ export function ExtractUsedFunctions(
     let function_calls = UsedFunctions.filter((node) => {
         return node.value === "FnAppl";
     });
-    console.log(`[Shared.ExtractUsedFunctions] res: ${JSON.stringify(used_functions, AST.removeParentAndChildren, 2)}`);
+    // console.log(`[Shared.ExtractUsedFunctions] res: ${JSON.stringify(used_functions, AST.removeParentAndChildren, 2)}`);
 
     return {used_functions, function_calls};
 }
@@ -541,6 +559,6 @@ export function ExtractUnusedFunctions(
     functionDefinitions: Map<string, FunctionNodeDef[]>
 ): AST.ASTNode[]{
     let UnusedFunctions: AST.ASTNode[] = ExtractFunctionsByUsage(false, functionDefinitions, functionReferences);
-    console.log(`[Shared.ExtractUnusedFunctions] res: ${JSON.stringify(UnusedFunctions, AST.removeParentAndChildren, 2)}`);
+    // console.log(`[Shared.ExtractUnusedFunctions] res: ${JSON.stringify(UnusedFunctions, AST.removeParentAndChildren, 2)}`);
     return UnusedFunctions;
 }

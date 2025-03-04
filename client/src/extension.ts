@@ -48,15 +48,20 @@ export function activate(context: ExtensionContext) {
 		'xmlTag'
 	  ], []);
 
-	  const provider: vscode.DocumentSemanticTokensProvider = {
-		provideDocumentSemanticTokens(document: vscode.TextDocument): vscode.ProviderResult<vscode.SemanticTokens> {
-		  return client.sendRequest('textDocument/semanticTokens/full', {textDocument: {uri: document.uri.toString()}});
-		}
-	  };
+	const config = vscode.workspace.getConfiguration('links');
+	const serverPath = config.get<string>('ocamlServerPath');
+	// client.sendNotification('custom/updateServerPath', serverPath);
+
+
+	const provider: vscode.DocumentSemanticTokensProvider = {
+	provideDocumentSemanticTokens(document: vscode.TextDocument): vscode.ProviderResult<vscode.SemanticTokens> {
+		return client.sendRequest('textDocument/semanticTokens/full', {textDocument: {uri: document.uri.toString()}});
+	}
+	};
 	
-	  context.subscriptions.push(
-		vscode.languages.registerDocumentSemanticTokensProvider({ language: 'links' }, provider, legend)
-	  );
+	context.subscriptions.push(
+	vscode.languages.registerDocumentSemanticTokensProvider({ language: 'links' }, provider, legend)
+	);
 
 
 	const outputChannel = vscode.window.createOutputChannel("LinksLSP");
@@ -133,6 +138,8 @@ export function activate(context: ExtensionContext) {
 
 	
 
+	
+
 	// The server is implemented in node
 	const serverModule = context.asAbsolutePath(
 		path.join('dist', 'server', 'src', 'extension.js')
@@ -169,6 +176,17 @@ export function activate(context: ExtensionContext) {
 		'Language Server Example',
 		serverOptions,
 		clientOptions
+	);
+
+	context.subscriptions.push(
+		vscode.workspace.onDidChangeConfiguration(event => {
+			if(event.affectsConfiguration('links.ocamlServerPath')){
+				const newConfig = vscode.workspace.getConfiguration('links');
+				const newServerPath = newConfig.get<string>('ocamlServerPath');
+				console.log("New server path: ", newServerPath);
+				// client.sendNotification('custom/updateServerPath', {serverPath: newServerPath});
+			}
+		})
 	);
 
 	// const dbHandler = new DatabaseHandler(client, outputChannel);

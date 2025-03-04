@@ -15,6 +15,17 @@
   ],
   "main": "./dist/client/src/extension.js",
   "contributes": {
+    "configuration":{
+      "type": "object",
+      "title": "Links Language Server",
+      "properties": {
+        "links.ocamlServerPath": {
+          "type":"string",
+          "default": "",
+          "description": "Path to the LinksParser server executable"
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -132,6 +143,10 @@
       {
         "id":"variant",
         "description": "Links Variant"
+      },
+      {
+        "id":"xmlText",
+        "description": "Links XML Text"
       }
     ],
     "semanticTokenScopes": [
@@ -173,6 +188,9 @@
           ],
           "variant":[
             "variant.links"
+          ],
+          "xmlText":[
+            "xmlText.links"
           ]
           
         }

@@ -23,7 +23,7 @@ export namespace DocumentManipulator{
                     let newLineContent;
                     if(change.text !== ""){
                         newLineContent = currentLineContent.slice(0, insertionIdx) + 
-                        change.text + currentLineContent.slice(range.start.character);
+                        change.text + currentLineContent.slice(range.end.character);
                     } else {
                         newLineContent = currentLineContent.slice(0, insertionIdx) + currentLineContent.slice(range.end.character);
                     }

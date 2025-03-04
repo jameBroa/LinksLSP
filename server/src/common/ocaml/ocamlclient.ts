@@ -1,13 +1,23 @@
 import * as net from 'net';
+import * as path from 'path';
+import * as fs from 'fs/promises';
+import * as vscode from 'vscode';
+import { spawn, type ChildProcess } from 'child_process';
 
 export class OCamlClient{
+    private ocamlServerPath: string | null = null;
     private connection_url: string;
     private connection_port: number;
+    private serverProcess: ChildProcess | null = null;
+    private IsServerPathInit: boolean = false;
 
-    constructor() {
+    constructor(serverPath: string) {
         this.connection_url = '127.0.0.1';
         this.connection_port = 8081;
+        this.IsServerPathInit = serverPath !== "";
+        this.Start_OCamlServer();
     }
+    
 
     private connect(): Promise<net.Socket> {
         return new Promise((resolve, reject) => {
@@ -100,6 +110,17 @@ export class OCamlClient{
         return char === '#';
     }
 
+    public async Update_ServerPath(serverPath: string): Promise<boolean> {
+        this.IsServerPathInit = serverPath !== "";
+        if(this.IsServerPathInit){
+            // Do other checks like validate files/directories?
+            this.ocamlServerPath = serverPath;
+            return await this.Start_OCamlServer();
+        } else {
+            return false;
+        }
+    }
+
     public create_payload(code: string): string{
         // (1): Remove any lines with comments
         // (2): Remove whitespace/newlines
@@ -130,5 +151,65 @@ export class OCamlClient{
 
     }
 
+    private async Start_OCamlServer(): Promise<boolean> {
+        if(!this.IsServerPathInit || this.ocamlServerPath === null){
+            return false;
+        }
 
+        try{
+            this.ocamlServerPath = path.resolve(this.ocamlServerPath);
+            // console.log(`dirname: ${__dirname}`);
+            // let fp = path.resolve(__dirname, '../../../../parser-pipline/parser/parser.ml');
+            // console.log(`resolved path: ${fp}`);
+            // this.ocamlServerPath = fp;
+            // const parentDir = path.dirname(this.ocamlServerPath);
+            // const dirContents = await fs.readdir(parentDir);
+            // console.log(`[OCamlClient] Directory contents: ${dirContents}`);
+
+            // const stats = await fs.stat(this.ocamlServerPath);
+            // console.log(`[OCamlClient] File exists: ${stats.isFile()}`);
+
+
+
+            await fs.access(this.ocamlServerPath);
+
+            const ServerDir = path.dirname(this.ocamlServerPath);
+            const executableName = path.basename(this.ocamlServerPath);
+            console.log(`[OCamlClient] Starting OCaml server using dune from ${ServerDir}`);
+
+            this.serverProcess = spawn('dune', ['exec', `./parser.exe`], {
+                stdio: 'ignore',
+                detached: true,
+                cwd: ServerDir
+            });
+
+            this.serverProcess.unref();
+
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            return true;
+
+        } catch (e){
+            this.serverProcess = null;
+            console.log(`[OCamlClient] Error starting OCaml server: ${e}`);
+            return false;
+        }
+    }
+
+    public async Stop_OCamlServer(): Promise<boolean> {
+        if(this.serverProcess){
+            this.serverProcess.kill('SIGTERM');
+            setTimeout(() => {
+                if(this.serverProcess){
+                    this.serverProcess.kill('SIGKILL');
+                    this.serverProcess = null;
+                }
+            }, 5000);
+            this.serverProcess = null;
+            console.log(`[OCamlClient] Stopped sever process`);
+            return true;
+        } else {
+            console.log(`[OCamlClient] No server process to stop`);
+            return true;
+        }
+    }
 }

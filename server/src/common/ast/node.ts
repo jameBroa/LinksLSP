@@ -1,4 +1,4 @@
-import { Diagnostic, DiagnosticSeverity, Location, Position, Range, SemanticTokens } from "vscode-languageserver";
+import { Diagnostic, DiagnosticSeverity, Hover as VSCodeHover, Location, Position, Range, SemanticTokens, WorkspaceEdit, CompletionItem } from "vscode-languageserver";
 import { AST } from "./ast";
 import { Function } from "./namespaces/function";
 import { Variable } from "./namespaces/variable";
@@ -8,7 +8,10 @@ import { ExtractExactDefinition } from "./namespaces/shared";
 import { Definition } from "./lsp/definition";
 import { References } from "./lsp/references";
 import { Diagnostics } from "./lsp/diagnostics";
-import { ParseSemanticTokensFull } from "./lsp/semanticTokens";
+import { ParseSemanticTokens } from "./lsp/semanticTokens";
+import { Hover } from "./lsp/hover";
+import { Rename } from "./lsp/rename";
+import { OnCompletion } from "./lsp/completion";
 
 export interface XNode {
     scope: AST.ASTNode
@@ -47,6 +50,7 @@ export class LSPFeatureHandler implements NodeInterface {
     functionDefinitions: Map<string, FunctionNodeDef[]>;
     functionReferences: Map<string, FunctionNode[]>;
     functionRefToDef: Map<AST.ASTNode, AST.ASTNode>;
+    functionNodeToDefMap: Map<FunctionNode, FunctionNodeDef>;
 
     constructor(ast: AST.ASTNode, uri: string) {
         this.tree = ast;
@@ -63,6 +67,7 @@ export class LSPFeatureHandler implements NodeInterface {
             this.functionReferences, 
             this.functionDefinitions
         );
+        this.functionNodeToDefMap = this.CreateFunctionNodeDefMap();
     }
 
     private CreateVarRefToDefMap
@@ -126,6 +131,10 @@ export class LSPFeatureHandler implements NodeInterface {
         }
         return functionRefToDef;
     }
+
+    
+
+
     
     public PrintAllFunVarRefNDef(): void{
         console.log(`[LinksNode] <----------->`);
@@ -162,6 +171,32 @@ export class LSPFeatureHandler implements NodeInterface {
     }
 
 
+    private CreateFunctionNodeDefMap(): Map<FunctionNode, FunctionNodeDef> {
+        let functionNodeDefMap = new Map<FunctionNode, FunctionNodeDef>();
+        for(const key of this.functionReferences.keys()){
+            let refs = this.functionReferences.get(key);
+            if(refs){
+                for(const ref of refs){
+                    let refScope: Range = ref.scope.range;
+                    let defs = this.functionDefinitions.get(key);
+                    if(defs){
+                        for(const def of defs){
+                            let defScope: Range = def.scope.range;
+                            if(AST.isInRange(refScope, defScope)){
+                                functionNodeDefMap.set(ref, def);
+                            }
+                        }
+                    } else {
+                        // No definitions found
+                        continue;
+                    }
+                }
+            }
+        }
+        return functionNodeDefMap;
+    }
+
+
     public GetDefinition(node: AST.ASTNode, uri: string): Location | null {
         return Definition(node, uri, this.variableRefToDef, this.functionRefToDef);
     }
@@ -192,7 +227,7 @@ export class LSPFeatureHandler implements NodeInterface {
     }
 
     public BuildSemanticTokensFull(documentText:string): SemanticTokens{
-        return ParseSemanticTokensFull(
+        return ParseSemanticTokens(
             this.variableDefinitions,
             this.variableReferences,
             this.variableRefToDef,
@@ -201,6 +236,57 @@ export class LSPFeatureHandler implements NodeInterface {
             this.functionRefToDef,
             this.tree,
             documentText
+        );
+    }
+
+    public BuildSemanticTokensRange(documentText: string, range: Range): SemanticTokens {
+       return ParseSemanticTokens(
+            this.variableDefinitions,
+            this.variableReferences,
+            this.variableRefToDef,
+            this.functionDefinitions,
+            this.functionReferences,
+            this.functionRefToDef,
+            this.tree,
+            documentText,
+            range
+        );
+    }
+
+    public HandleHover(hoverNode: AST.ASTNode): VSCodeHover | null{
+        return Hover(
+            hoverNode, 
+            this.functionReferences,
+            this.functionNodeToDefMap
+        );
+    }
+
+    public HandleRename(renameNode: AST.ASTNode, newName: string): WorkspaceEdit | null {
+        return Rename(
+            renameNode, 
+            newName,
+            this.variableDefinitions,
+            this.variableReferences,
+            this.functionDefinitions,
+            this.functionReferences,
+            this.uri
+        );
+    }
+
+    public async HandleCompletion(
+        Position: Position, 
+        documentText: string,
+        db_tables: string[] | undefined,
+        db_schemas: Map<string, {columnName:string, dataType: string}[]> | undefined
+    
+    ): Promise<CompletionItem[]>{
+        return OnCompletion(
+            Position,
+            documentText,
+            this.variableDefinitions,
+            this.functionDefinitions,
+            db_tables,
+            db_schemas
         );
     }
 

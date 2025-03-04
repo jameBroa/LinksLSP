@@ -1,4 +1,4 @@
-import { SemanticTokens, SemanticTokensBuilder } from "vscode-languageserver";
+import { Range, SemanticTokens, SemanticTokensBuilder } from "vscode-languageserver";
 import { FunctionNode, FunctionNodeDef, VariableNode, VariableNodeDef } from "../node";
 import { AST } from "../ast";
 import {ExtractConstantsAndProjectionsAndXML, ExtractNumConstants, ExtractProjections, ExtractStringConstants, ExtractUnusedFunctions, ExtractUnusedVariables, ExtractUsedFunctions, ExtractUsedVariables, ExtractXML } from "../namespaces/shared";
@@ -16,7 +16,8 @@ function SortTokens(
     xml_declarations: AST.ASTNode[], 
     xml_tags: AST.ASTNode[],
     xml_attributes: AST.ASTNode[],
-    variants: AST.ASTNode[]
+    variants: AST.ASTNode[],
+    xml_text: AST.ASTNode[]
 ){
     return [
         ...used_variables.map(node => ({node, type: 8})),
@@ -30,7 +31,8 @@ function SortTokens(
         ...xml_declarations.map(node => ({node, type: 23})),
         ...xml_tags.map(node => ({node, type: 24})),
         ...xml_attributes.map(node => ({node, type: 25})),
-        ...variants.map(node => ({node, type: 30}))
+        ...variants.map(node => ({node, type: 30})),
+        ...xml_text.map(node => ({node, type: 31}))
     ].sort((a, b) => {
         if (!a.node.range || !b.node.range) {
           return 0;
@@ -44,11 +46,8 @@ function SortTokens(
 
 function CreateBuilder(all_tokens: {node: AST.ASTNode, type:number}[], builder: SemanticTokensBuilder, documentText: string){
     for(const {node, type} of all_tokens){
-        console.log(`[semanticTokens] node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
-        console.log(`for type: ${type}`);
         let AdjustedNode: AST.ASTNode = RangeReplacer.AdjustRangeAsAST(node);
         let AdjustedNodes: AST.ASTNode[] = RangeReplacer.AdjustByTypeByAST(AdjustedNode, type, documentText);
-        console.log(`[semanticTokens] AdjustedNodes: ${JSON.stringify(AdjustedNodes, AST.removeParentAndChildren, 2)}`);
         for(const node of AdjustedNodes){
             builder.push(
                 node.range.start.line,
@@ -62,7 +61,7 @@ function CreateBuilder(all_tokens: {node: AST.ASTNode, type:number}[], builder: 
 }
 
 
-export function ParseSemanticTokensFull(
+export function ParseSemanticTokens(
     variableDefinitions: Map<string, VariableNodeDef[]>,
     variableReferences: Map<string, VariableNode[]>,
     variableRefToDef: Map<AST.ASTNode, AST.ASTNode>,
@@ -70,9 +69,9 @@ export function ParseSemanticTokensFull(
     functionReferences: Map<string, FunctionNode[]>,
     functionRefToDef: Map<AST.ASTNode, AST.ASTNode>,
     ast: AST.ASTNode,
-    documentText: string
+    documentText: string,
+    range?: Range
 ): SemanticTokens{
-    console.log("starting extraction...");
     
     const unused_variables = ExtractUnusedVariables(variableReferences, variableDefinitions, variableRefToDef);
     const used_variables = ExtractUsedVariables(variableReferences, variableDefinitions, variableRefToDef);
@@ -82,7 +81,7 @@ export function ParseSemanticTokensFull(
     const num_constants = ExtractNumConstants(all_constants);    
     const unused_functions = ExtractUnusedFunctions(functionReferences, functionDefinitions);
     const {used_functions, function_calls} = ExtractUsedFunctions(functionReferences, functionDefinitions, unused_functions);
-    const {xml_declarations, xml_tags, xml_attributes} = ExtractXML(xml, documentText);
+    const {xml_declarations, xml_tags, xml_attributes, xml_text} = ExtractXML(xml, documentText);
     let all_tokens = SortTokens(
         unused_variables,
         used_variables,
@@ -95,33 +94,15 @@ export function ParseSemanticTokensFull(
         xml_declarations, 
         xml_tags, 
         xml_attributes,
-        variants
+        variants,
+        xml_text
     );
 
-    // // optimisation for later, take xml from earlier, take is ranges, and pass that in AdjustRangesInsideXML
-    // try{
-    //     all_tokens = RangeReplacer.AdjustRangesInsideXML(all_tokens, documentText, ast);
-    // } catch (e){
-    //     console.log("[error]", e);
-    // }
+    if(range){
+        console.log(`[semanticTokens] Filtering by range: ${JSON.stringify(range, null, 2)}`);
+        all_tokens = all_tokens.filter(({node}) => AST.isInRange(range, node.range));
+    }
 
-    // // Call it again since RangeReplacer will have changed the ranges
-    // all_tokens = SortTokens(
-    //     unused_variables,
-    //     used_variables,
-    //     string_constants,
-    //     num_constants,
-    //     projections,
-    //     unused_functions,
-    //     used_functions,
-    //     function_calls, 
-    //     xml_declarations, 
-    //     xml_tags, 
-    //     xml_attributes
-    // );
-
-
-    console.log(`[semanticTokens] all_tokens: ${JSON.stringify(all_tokens, AST.removeParentAndChildren, 2)}`);
 
     let builder = new SemanticTokensBuilder();
     CreateBuilder(all_tokens, builder, documentText);

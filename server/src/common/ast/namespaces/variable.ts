@@ -1,7 +1,7 @@
 import { Position, Range } from "vscode-languageserver";
 import { AST } from "../ast";
 import { LSPFeatureHandler, VariableNode, VariableNodeDef } from "../node";
-import { addToDefinitions, addToXNode, createScopeNode, createScopeNodeForDef, ExtractExactDefinition, ExtractStringFromStrConstant, RefDef, traverseASTByLevel, traverseASTFull } from "./shared";
+import { addToDefinitions, addToXNode, createScopeNode, createScopeNodeForDef, ExtractExactDefinition, ExtractStringFromConstant, ExtractStringFromStrConstant, RefDef, traverseASTByLevel, traverseASTFull } from "./shared";
 import { Function } from "./function";
 
 
@@ -129,22 +129,49 @@ export namespace Variable {
                 node.parent.value === "Record");
         }
 
+        function isVariant(node: AST.ASTNode): boolean {
+            return (node.parent !== null &&
+                node.parent.parent !== null &&
+                node.parent.value === "Variant" &&
+                node.parent.parent.value === "Case" &&
+                node.parent.children![1] === node
+            );
+        }
+
+
+        // Checks only if Variant has one variable, i.e. no tuple
         export function isInCase(node: AST.ASTNode): boolean {
             return(node.type === "Leaf" &&
+                isVariant(node)
+                // node.parent !== null &&
+                // node.parent.parent !== null &&
+                // node.parent.value === "Variant" && 
+                // node.parent.parent.value === "Case" && // was previously "Case statement"
+                // node.parent.children![1] === node
+            );
+        }
+
+        export function isInCaseForTuple(node: AST.ASTNode): boolean {
+            return(node.type === "Leaf" &&
                 node.parent !== null &&
-                node.parent.parent !== null &&
-                node.parent.value === "Variant" && 
-                node.parent.parent.value === "Case statement" &&
-                node.parent.children![1] === node
+                node.parent.value === "Tuple" &&
+                isVariant(node.parent)
             );
         }
 
         export function isLName(node: AST.ASTNode): boolean {
             return (node.type === "Leaf" &&
                 node.parent !== null &&
-                node.parent.parent !== null &&
-                node.parent.parent.value === "Attribute: l:name"
-            )
+                node.parent.value === "Attribute: l:name"
+            );
+        }
+
+        export function isSwitchListDestructering(node: AST.ASTNode): boolean {
+            return (isLeafAndVariable(node) &&
+                node.parent !== null &&
+                node.parent.value === "Cons" 
+                || (node.parent !== null && node.parent.value === "Case" && node.parent.children![0] === node)
+            );
         }
 
         export function isVariableDefinition(node: AST.ASTNode): boolean {
@@ -159,7 +186,9 @@ export namespace Variable {
                 || isDatabase(node)
                 || isRecord(node)
                 || isInCase(node)
+                || isInCaseForTuple(node)
                 || isLName(node)
+                || isSwitchListDestructering(node)
             );
            
         }
@@ -186,6 +215,13 @@ export namespace Variable {
             return (
                 node.value === "Fun" && 
                 node.children![0].value.split(" ")[1] === "dummy_wrapper"
+            );
+        }
+
+        export function hasNotReachedCaseNode(node: AST.ASTNode): boolean {
+            return (
+                node.value !== "Case" &&
+                node.parent !== null
             );
         }
     }
@@ -223,7 +259,6 @@ export namespace Variable {
 
     function getScopeForLName(varNode: AST.ASTNode, currentScope: AST.ASTNode) {
         let inputCurrScope = currentScope;
-        console.log(`current pos (bef): ${JSON.stringify(currentScope, AST.removeParentAndChildren, 2)}`);
 
         currentScope = currentScope.parent!;
         while(!VariableConditions.hasReachedParentForm(currentScope)){
@@ -243,13 +278,10 @@ export namespace Variable {
 
     function getScopeOfDef(varNode: AST.ASTNode, currentScope: AST.ASTNode) {
         let varName = getName(varNode);
-        console.log(`current pos (bef): ${JSON.stringify(currentScope.range)}`);
         while(VariableConditions.hasNotReachedParentScope(currentScope)){
             // Can do '.parent!' because hasNotReachedParentScope
             currentScope = currentScope.parent!; 
-            console.log(`current pos (inbetw.): ${JSON.stringify(currentScope.range)}`);
         }
-        console.log(`current pos (aft): ${JSON.stringify(currentScope.range)}`);
 
         let LocalDefinitions = ExtractLocalDefinitions(currentScope);
         if(LocalDefinitions.has(varName)){
@@ -297,10 +329,24 @@ export namespace Variable {
     }
 
     function getScopeOfCase(node: AST.ASTNode): AST.ASTNode {
-        console.log(`node: ${JSON.stringify(node.range, null, 2)}`);
-        let caseNode = node.parent!.parent!.parent!;
-        let caseContents = caseNode.children![1];
-        return caseContents.children![0];
+        let caseNode = node.parent!.parent!;
+        return caseNode.children![1];
+    }
+
+    function getScopeOfCaseDestructing(node: AST.ASTNode, currentScope: AST.ASTNode): AST.ASTNode {
+        let inputScope = currentScope;
+        while(VariableConditions.hasNotReachedCaseNode(currentScope)){
+            currentScope = currentScope.parent!;
+        }
+
+        if(currentScope !== null && currentScope !== inputScope && !VariableConditions.isAtRootOfAST(currentScope)){
+            return currentScope.children![1];
+        } else{
+            return inputScope;
+        }
+
+        // Go up until we hit "Case" node
+        // Return 2nd child of "Case" node since its a Block
     }
 
     export function ExtractDefinitions(ast: AST.ASTNode): Map<string, VariableNodeDef[]> {
@@ -310,47 +356,39 @@ export namespace Variable {
             let varName;
             if(VariableConditions.isVariableDefinition(currentNode)) {
 
-                console.log((
-                    VariableConditions.isLeafAndVariable(currentNode),
-                    !VariableConditions.isFnAppl(currentNode),
-                    VariableConditions.hasValidParent(currentNode)
-                ),
-                VariableConditions.isIteration(currentNode) ,
-                VariableConditions.isDatabase(currentNode),
-                VariableConditions.isRecord(currentNode),
-                VariableConditions.isInCase(currentNode)
-            );
-
                 varName = getName(currentNode);
-                // console.log(`found definition for: ${varName}`);
-                // console.log(`currentNode: ${JSON.stringify(currentNode, AST.removeParentAndChildren, 2)}`);
                 let scopeNode: AST.ASTNode | null = null;
+
+
+                // Change to switch case eventually
                 if(VariableConditions.isIteration(currentNode)){
-                    console.log(`found iteration variable! (${varName})`);
                     scopeNode = getScopeOfIteration(currentNode);
                 } else if (VariableConditions.isDatabase(currentNode)) {
-                    console.log(`found db variable!`);
                     scopeNode = getScopeOfDatabase(currentNode);
-                    console.log(`db variable scope: ${JSON.stringify(scopeNode, AST.removeParentAndChildren, 2)}`);
                 } else if (VariableConditions.isInCase(currentNode)) {
-                    console.log("found variable inside case");
                     scopeNode = getScopeOfCase(currentNode);
                 
+                } else if (VariableConditions.isInCaseForTuple(currentNode)) {
+                    scopeNode = getScopeOfCase(currentNode.parent!);
                 } else if (VariableConditions.isLName(currentNode)) {
-                    console.log(`[l:name] INSIDE`)
-                    varName = ExtractStringFromStrConstant(currentNode.value);
+                    varName = ExtractStringFromConstant(currentNode.value);
                     let tempScopeNode = getScopeForLName(currentNode, currentNode);
                     if(tempScopeNode !== currentNode){
                         scopeNode = tempScopeNode;
                     }
+                    currentNode.range = Range.create(
+                        Position.create(currentNode.range.start.line, currentNode.range.start.character+1),
+                        Position.create(currentNode.range.start.line, currentNode.range.start.character+1 + varName.length)
+                    );
 
+                } else if (VariableConditions.isSwitchListDestructering(currentNode)) {
+                    varName = getName(currentNode);
+                    scopeNode = getScopeOfCaseDestructing(currentNode, currentNode);
 
                 }else {
-                    console.log(`doing normal scope!`);
                     scopeNode = getScopeOfDef(currentNode, currentNode);
                 }
 
-                console.log(`scope for var def: ${varName}, ${JSON.stringify(scopeNode, AST.removeParentAndChildren, 2)}`);
 
                 if(scopeNode && varName){
                     let varDefNode = {

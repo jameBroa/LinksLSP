@@ -48,6 +48,17 @@ Calling out known issues can help limit users opening duplicate issues against y
 
 ## Release Notes
 
+### 04/03/25
+- Bug fixes
+- Now runs without manually starting <a href="https://github.com/jameBroa/LinksParser">LinksParser</a>
+    - To do so, clone repo, have OCaml installed, configure path to parser.ml file in Extension settings
+- Added refactoring support for vars/func
+- Added onCompletion for var/fun names
+- Refactored onCompletion for tables
+- Added support for onHover
+    - onHover for built-in functions reveals the type
+    - onHover for user-defined functions reveal the fun definition and params
+
 ### 28/02/25
 - Cleaned up a lot of bugs
 - Solved problem with XML range information being incorrect for attributes defined by a multiline string

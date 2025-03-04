@@ -116,6 +116,12 @@
       "settings": {
         "foreground": "#67ad66"
       }
+    },
+    {
+      "scope":"xmlText.links",
+      "settings": {
+        "foreground": "#ffffff"
+      }
     }
     
   ]

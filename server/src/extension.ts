@@ -32,7 +32,10 @@ import {
   Connection,
   TextDocumentChangeEvent,
   DidChangeTextDocumentParams,
-  TextDocumentContentChangeEvent
+  TextDocumentContentChangeEvent,
+  SemanticTokensRangeParams,
+  RenameParams,
+  WorkspaceEdit
 } from 'vscode-languageserver';
 
 import { AST } from './common/ast/ast';
@@ -103,7 +106,7 @@ export class LanguageServer {
     this.globalSettings = this.defaultSettings;
     this.documentSettings = new Map();
     this.documentsMap = new Map();
-    this.ocamlClient = new OCamlClient();
+    this.ocamlClient = new OCamlClient("");
     this.mutex = new Mutex();
     this.initializeHandlers();
   }
@@ -116,21 +119,22 @@ export class LanguageServer {
     this.connection.onReferences(this.onReferences.bind(this));
     this.connection.onDefinition(this.onDefinition.bind(this));
     this.connection.onHover(this.onHover.bind(this));
+    this.connection.onRenameRequest(this.onRename.bind(this));
 
     this.connection.onDidChangeTextDocument(this.onDidChangeTextDocument.bind(this));
     this.connection.onDidChangeConfiguration(this.onDidChangeConfiguration.bind(this));
     this.connection.onDidChangeWatchedFiles(this.onDidChangeWatchedFiles.bind(this));
     this.connection.onNotification('custom/updateDatabaseConfig', this.onNotification.bind(this));
+    this.connection.onNotification('custom/updateServerPath', this.onUpdateServerPath.bind(this));
     this.connection.onCompletion(this.onCompletion.bind(this));
 
     // this.connection.onRequest("textDocument/semanticTokens/full", 
     //   lodash.debounce(
     //     this.onRequestFull, 
-    //     300,
+    //     100,
     //     {trailing: true}
     //   ).bind(this));
     this.connection.onRequest("textDocument/semanticTokens/full", this.onRequestFull.bind(this));
-
     this.connection.onRequest("textDocument/semanticTokens/range", this.onRequestRange.bind(this));
     // this.connection.onRequest("textDocument/semanticTokens/full/delta", this.onRequestFullDelta.bind(this));
     this.connection.onCompletionResolve(this.onCompletionResolve.bind(this));
@@ -156,6 +160,7 @@ export class LanguageServer {
         capabilities: {
           definitionProvider: true,
           referencesProvider: true,
+          renameProvider: true,
           hoverProvider: true,
           textDocumentSync: TextDocumentSyncKind.Incremental,
           semanticTokensProvider: {
@@ -192,7 +197,8 @@ export class LanguageServer {
                 "unusedFunction",
                 "usedFunction",
                 "functionCall",
-                "variant"
+                "variant",
+                "xmlText"
               ],
               tokenModifiers: []
             },
@@ -220,8 +226,26 @@ export class LanguageServer {
     }
      
   }
+
+  private async onUpdateServerPath(data: {serverPath: string}) {
+    this.ocamlClient.Update_ServerPath(data.serverPath);
+  }
+
+  public async onRename(params: RenameParams): Promise<WorkspaceEdit | null> {
+    const {ast, documentText} = await this.HandleASTAndDocumentText(params);
+    if(ast === null || documentText === "") {
+      return null;
+    }
+    const newPos = Position.create(params.position.line+2, params.position.character);
+    const referenceNode = AST.findNodeAtPositionForRename(ast, newPos);
+    if(referenceNode === null) {
+      return null;
+    }
+    const node = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
+    return node.HandleRename(referenceNode, params.newName);
+  }
+
   public async onReferences(params: ReferenceParams): Promise<Location[]> {
-    console.log(`[onReferences] called!`);
     let ast;
     if(this.documentsMap.has(params.textDocument.uri)) {
       // map is only setup when the doc changes
@@ -230,7 +254,6 @@ export class LanguageServer {
       // this is for when the file is first loaded
       ast = await this.getAST(params);
     }
-    console.log("[onReferences] got AST!");
     if(!ast) {
       console.log("[LanguageServer.OnReferences] Could not get AST");
       return [];
@@ -239,7 +262,6 @@ export class LanguageServer {
     // Retrieve ASTNode at the position of the cursor
     // For some reason character position on the first line is 1 behind?
     let position;
-    console.log(`[LanguageServer.OnReferences] position (before adjusting): ${JSON.stringify(params.position, null, 2)}`);
 
     position = Position.create(
       params.position.line+2, params.position.character
@@ -250,7 +272,6 @@ export class LanguageServer {
     const node = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
 
     if(referenceNode === null){
-      console.log("[LanguageServer.OnReferences] Could not find node at cursor position");
       return [];
     }
 
@@ -258,16 +279,14 @@ export class LanguageServer {
     for(let ref of LinksNodeReferences) {
       ref.range = RangeReplacer.AdjustRangeAsRange(ref.range);
     }
-    console.log(`[LanguageServer.OnReferences] referenceNode: ${JSON.stringify(referenceNode, AST.removeParentField, 2)}`);
     let valid_references: Location[] = [];
     if(!referenceNode.parent) {
       return [];
     }
 
     if(env === ENV_MODE.FAST) {
-      console.log(`[LanguageServer.OnReferences] Fast mode`);
-      console.log(`[Fast Result]: ${JSON.stringify(LinksNodeReferences, AST.removeParentAndChildren, 2)}`);
-      // node.PrintAllFunVarRefNDef();
+      node.PrintAllFunVarRefNDef();
+      console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
 
       return LinksNodeReferences;
     }
@@ -387,7 +406,8 @@ export class LanguageServer {
     if (range1.end.line < range2.start.line) {
       return true;
     }
-    if (range1.end.line === range2.start.line && range1.end.character < range2.start.character) {
+    if (range1.end.line === range2.start.line 
+      && range1.end.character < range2.start.character) {
       return true;
     }
     return false;
@@ -397,7 +417,8 @@ export class LanguageServer {
     if (range1.start.line > range2.end.line) {
       return true;
     }
-    if (range1.start.line === range2.end.line && range1.start.character > range2.end.character) {
+    if (range1.start.line === range2.end.line 
+      && range1.start.character > range2.end.character) {
       return true;
     }
     return false;
@@ -505,7 +526,6 @@ export class LanguageServer {
       return null;
     }
 
-    console.log(`user position: ${JSON.stringify(params.position, null, 2)}`);
     const referenceNode = AST.findNodeAtPosition(
       ast, 
       Position.create(
@@ -519,7 +539,6 @@ export class LanguageServer {
     let definition: Location | null = null;
     if(referenceNode !== null) {
 
-      console.log(`referenceNode: ${JSON.stringify(referenceNode, AST.removeParentAndChildren, 2)}`);
 
 
       definition = node.GetDefinition(referenceNode, params.textDocument.uri);
@@ -532,8 +551,6 @@ export class LanguageServer {
     }
 
     if(env === ENV_MODE.FAST) {
-      console.log(`[Returning FAST OnDefinition!]`);
-      console.log(`[Fast Result]: ${JSON.stringify(definition, AST.removeParentAndChildren, 2)}`);
       return definition;
     }
 
@@ -668,54 +685,20 @@ export class LanguageServer {
 
   }
   private async onHover(params: TextDocumentPositionParams): Promise<Hover | null> {
+    
     const document = this.documents.get(params.textDocument.uri);
-    if(!document) {
+
+    let {ast, documentText} = await this.HandleASTAndDocumentText(params);
+    if(ast === null || documentText === "" || !document) {
       return null;
     }
-    
-    return null;
+
+    const referenceNode = AST.getClosestNodeFromAST(ast, Position.create(params.position.line+2, params.position.character));
+    const featureHandler = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
+    console.log(`referenceNode.value: ${referenceNode.value}`);
+    let hover: Hover | null = featureHandler.HandleHover(referenceNode.parent!);
+    return hover;
   
-    // Previous implementation
-    // // GlobalLogger.log(`text (HERE): ${text}`);
-    // console.log(`text (HERE): ${text}`);
-    // let text_to_send = text;
-    // text_to_send = text_to_send.replace(/\s+/g, ' ').trim();
-  
-    // // const client = new net.Socket();
-    // // client.connect(8081, '127.0.0.1', () => {
-    // //   client.write(`${text_to_send}\n`);
-    // // });
-  
-    // // client.on('data', (data) => {
-    // //   console.log(`Received (1): ${JSON.stringify(JSON.parse(data.toString()), null, 2)}`);
-    // //   console.log(`Received (2): ${data.toString()}`);
-    // //   let data_str = data.toString();
-    // //   console.log(text_to_send.substring(175, 220));
-    // //   client.destroy();
-    // // });
-  
-    // const lines = text.split(/\r?\n/g);
-    // const word = InfoRetriever.getWordAtPosition(lines, params.position);
-    // const functionRegex = new RegExp(`fun\\s+${word}\\s*\\(([^)]*)\\)\\s*{`);
-  
-    // for (let i = 0; i < lines.length; i++) {
-    //   const line = lines[i];
-    //   const match = functionRegex.exec(line);
-    //   if (match) {
-    //     const hoverContent: MarkupContent = {
-    //       kind: 'markdown',
-    //       value: `\`\`\`plaintext\n${match[0]}\n\`\`\``
-    //     };
-    //     return {
-    //       contents: hoverContent,
-    //       range: Range.create(
-    //         Position.create(i, match.index),
-    //         Position.create(i, match.index + match[0].length)
-    //       )
-    //     };
-    //   }
-    // }
-    // return null;
   }
   private onDidChangeConfiguration(change: any) {
     //For now, change:any
@@ -771,12 +754,11 @@ export class LanguageServer {
     const LinksNodeDiagnostics = node.GetDiagnostics(this.hasDiagnosticRelatedInformationCapability);
     // node.PrintAllFunVarRefNDef();
     if(env === ENV_MODE.FAST){
-      console.log(`[ValidateTextDocument] Finishing FAST!`);
       this.connection.sendDiagnostics({
         uri:textDocument.uri, 
         diagnostics: LinksNodeDiagnostics
       });
-      console.log(`All diagnostics: ${JSON.stringify(LinksNodeDiagnostics, AST.removeParentAndChildren, 2)}`);
+      // console.log(`All diagnostics: ${JSON.stringify(LinksNodeDiagnostics, AST.removeParentAndChildren, 2)}`);
       return LinksNodeDiagnostics;
     }
 
@@ -851,22 +833,51 @@ export class LanguageServer {
     this.db_schemas = schemas;
   }
   private async onCompletion(params: TextDocumentPositionParams): Promise<CompletionItem[]> {
+    if(env === ENV_MODE.FAST) {
+      const {ast, documentText} = await this.HandleASTAndDocumentText(params);
+      if(ast === null || documentText === "") {
+        return [];
+      }
+
+      const featureHandler = new LSPFeatureHandler(
+        ast.children![0], 
+        params.textDocument.uri
+      );
+      const newpos = RangeReplacer.ConvertParamsPos(params.position);
+      let completion = featureHandler.HandleCompletion(
+        newpos, 
+        documentText,
+        this.db_tables,
+        this.db_schemas
+      );
+      return completion; 
+
+    }
+
+
     //Todo: Remove log statements + unnecessary code
     if(this.db_tables !== undefined && this.db_schemas !== undefined) {
       const provider = new TableCompletionProvider(this.db_tables, this.db_schemas); // need to pass in tables and schemas
-      const document = this.documents.get(params.textDocument.uri);
-      if (!document) {
+      // const document = this.documents.get(params.textDocument.uri);
+      const {ast, documentText} = await this.HandleASTAndDocumentText(params);
+      if (!documentText) {
         return [];
       }
       const eg_working = [{"label":"accounts","kind":15,"detail":"Table: accounts","documentation":{"kind":"markdown","value":"Columns:\n- id: integer\n- accounttype: text\n- balance: double precision"},"insertTextFormat":2,"textEdit":{"range":{"start":{"line":7,"character":21},"end":{"line":7,"character":29}},"newText":"\"accounts\" with (id: Int, accounttype: String, balance: Float) from db;"}}];
       // return eg_working as CompletionItem[];
-      const completion = await provider.provideCompletions(document, params.position);
+      try{
+      const completion = await provider.provideCompletions(documentText, params.position);
+      return completion;
+
+      } catch (e){
+        console.error(`[onCompletion] Error: ${e}`);
+        return [];
+      }
       // GlobalLogger.log(`completion from onCompletion: ${JSON.stringify(completion)}`);
       
       // GlobalLogger.log(`${eg_working === completion}`);
       // GlobalLogger.log(`eg_working: ${JSON.stringify(eg_working)}`);
       // return [{"label":"accounts","kind":15,"detail":"Table: accounts","documentation":{"kind":"markdown","value":"Columns:\n- id: integer\n- accounttype: text\n- balance: double precision"},"insertTextFormat":2,"textEdit":{"range":{"start":{"line":7,"character":23},"end":{"line":7,"character":29}},"newText":"\"accounts\" with (id: Int, accounttype: String, balance: Float) from db;"}}];
-      return completion;
     } else {
       return [];
     }
@@ -877,7 +888,6 @@ export class LanguageServer {
   // value is the string representation of the document
 
   private async onDidChangeTextDocument(params: DidChangeTextDocumentParams){
-    console.log(`[onDidChangeTextDocument] called`);
     let document = params.textDocument;
     let contentChanges: TextDocumentContentChangeEvent[] = params.contentChanges;
 
@@ -913,12 +923,10 @@ export class LanguageServer {
     let documentText;
     if(this.documentsMap.has(params.textDocument.uri)) {
       // map is only setup when the doc changes
-      console.log("[onRequestFull] Getting AST from map");
       ast = await this.getASTFromText(this.documentsMap.get(params.textDocument.uri)!);
       documentText = this.documentsMap.get(params.textDocument.uri);
     } else {
       // this is for when the file is first loaded
-      console.log("[onRequestFull] Getting AST from file itself");
       ast = await this.getAST(params);
       let temp = this.documents.get(params.textDocument.uri);
       documentText = temp!.getText();
@@ -926,7 +934,6 @@ export class LanguageServer {
 
 
     if(!ast){
-      console.log("[OnRequestFull] Couldn't get AST");
       if(lastAst === null){
         return;
       }
@@ -935,262 +942,27 @@ export class LanguageServer {
       lastAst = ast;
     }
     
-    console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
 
     try{
     const node = new LSPFeatureHandler(ast, params.textDocument.uri);
     let SemanticTokensNew = node.BuildSemanticTokensFull(documentText!);
-    node.PrintAllFunVarRefNDef();
+    // node.PrintAllFunVarRefNDef();
     
 
     if(env === ENV_MODE.FAST) {
-      console.log(`[onRequestFull] Fast mode results: ${Array.from(SemanticTokensNew!.data)}`);
 
       return SemanticTokensNew;
     }
-  } catch (e){
-    console.log("[FAILED TO BUILD SEMANTIC TOKENS]", e);
+  } catch (e: any) {
+    console.log("[FAILED TO BUILD SEMANTIC TOKENS]", JSON.stringify(e.message));
   }
-    let builder = new SemanticTokensBuilder();
-
-    // ##################### VARIABLES #####################
-    const all_vars: AST.ASTNode[] = AST.getAllVariables(ast);
-    console.log(`[onRequestFull] all_vars: ${JSON.stringify(all_vars, AST.removeParentField, 2)}`);
-    let all_vars_no_cons = all_vars.filter((node) => {
-      return node.value.substring(0,35) !== "Constant: (CommonTypes.Constant.Int" 
-      && node.value.substring(0, 37) !== "Constant: (CommonTypes.Constant.Float" &&
-      node.value.substring(0, 38) !== "Constant: (CommonTypes.Constant.String";
-    });
-    
-    let unused_variables = AST.variableParser.extractUnusedVariables(all_vars_no_cons);
-    console.log(`[unused variables]: ${JSON.stringify(unused_variables, AST.removeParentField, 2)}`);
-    let unused_variables_set = new Set(unused_variables);
-
-    let used_variables = all_vars_no_cons.filter((node) => {
-      return !unused_variables_set.has(node);
-    });
-
-    let constants = all_vars.filter((node) => {
-      return node.value.substring(0,35) === "Constant: (CommonTypes.Constant.Int" || 
-      node.value.substring(0, 37) === "Constant: (CommonTypes.Constant.Float";
-    });
-
-    let string_constants = all_vars.filter((node) => {
-      return node.value.substring(0, 38) === "Constant: (CommonTypes.Constant.String";
-    });
-
-
-    let projections = AST.variableParser.extractProjectionsFromAST(ast);
-    // ##################### ######### #####################
-
-
-    let all_xml = AST.getXMLNodes(ast);
-
-    let xml = all_xml.filter((node) => {
-      return node.value.substring(0,9) !== "TextNode:";
-    });
-
-    // ##################### FUNCTIONS #####################
-
-
-    // TODO: Modify all the following functions below into ONE
-
-    // IF STUCK WORKING TICKET 1 HERE
-    // let functionDefinitions = AST.functionParser.extractFunctionDefinitions(ast);
-    // functionDefinitions: ASTNodes of type "Fun"
-    let funNodes: AST.ASTNode[] = AST.functionParser.getFunctionFromAST(ast);
-
-
-    let functionDefinitions: AST.ASTNode[] = [];
-
-
-    try{
-    for(const node of funNodes) {
-      const funName = AST.functionParser.getName(node);
-      const regexForFun = new RegExp(`fun\\s+${funName}\\s*\\(`);
-      const regexForSig = new RegExp(`sig\\s+${funName}:\\s*\\(`);
-      const RangeForFun = AST.extractRegexPosition(documentText!, node.range, regexForFun);
-      const RangeForSig = AST.extractRegexPosition(documentText!, node.range, regexForSig);
-      // Contains location of the 'fun {funName}'
-      functionDefinitions.push({
-        type: node.type,
-        value: node.value,
-        range: Range.create(
-          Position.create(RangeForFun.start.line, RangeForFun.start.character+4),
-          RangeForFun.end
-        ),
-        children: node.children,
-        parent: node.parent
-      } as AST.ASTNode);
-      functionDefinitions.push({
-        type: node.type,
-        value: node.value,
-        range: Range.create(
-          Position.create(RangeForSig.start.line, RangeForSig.start.character+4),
-          Position.create(RangeForSig.end.line, RangeForSig.end.character-1)
-        ),
-        children: node.children,
-        parent: node.parent
-      } as AST.ASTNode);
-    }
-  } catch(e){
-    console.log("failed to adjust functionDefinitions", e);
-  }
-     
-    // functionCalls: an array of strings which are just the function calls in a doc.
-    let functionCalls: string[] = AST.functionParser.extractFunctionCalls(ast);
-    console.log(`functionCalls: ${JSON.stringify(functionCalls, null, 2)}`);
-    // functionCallsMap is just a Map between function name and the number of times it is called
-    let functionCallsMap: Map<string, number> = AST.functionParser.createFunctionToNumCallsMap(functionCalls);
-    // functionCallers: the actual ASTNodes of the function calls (not FnAppl but the "Variable: {funName}")
-    let functionCallers: AST.ASTNode[] = AST.functionParser.getFunctionCallers(ast);
-
-    let unusedFunctions: AST.ASTNode[] = [];
-    if(functionDefinitions){
-        unusedFunctions = functionDefinitions.filter((node) => {
-          const funName = AST.functionParser.getName(node);
-          return funName !== "dummy_wrapper" && !functionCallsMap.has(funName) || functionCallsMap.get(funName) === 0;
-          // return node.value !== "Binder: dummy_wrapper" && !functionCallsMap.has(node.value.split(" ")[1]) || functionCallsMap.get(node.value.split(" ")[1]) === 0;
-        });
-    }
-    
-
-    let usedFunctions: AST.ASTNode[] = [];
-
-    if(functionDefinitions){
-      usedFunctions = functionDefinitions.filter((node) => {
-        const funName = AST.functionParser.getName(node);
-        return functionCallsMap.has(funName);
-      });
-    }
-
-
-    // console.log("unusedFunctions", JSON.stringify(unusedFunctions, AST.removeParentField, 2));
-    // console.log("usedFunctions", JSON.stringify(usedFunctions, AST.removeParentField, 2));
-    
-    // ##################### ######### #####################
-
-
-    const document = this.documents.get(params.textDocument.uri);
-    if(!document){
-      return null;
-    } 
-
-    console.log("starting xml");
-    // ##################### XML #####################
-
-    let xml_semantics;
-    if(this.documentsMap.has(params.textDocument.uri)) {
-      // map is only setup when the doc changes
-      xml_semantics = AST.xmlParser.extractSemantics(xml, this.documentsMap.get(params.textDocument.uri)!);
-     
-    } else {
-      // this is for when the file is first loaded
-      xml_semantics = AST.xmlParser.extractSemantics(xml, document.getText());
-    }
-
-    // let xml_semantics = AST.xmlParser.extractSemantics(xml, document);
-
-    let xml_declaration = xml_semantics.filter((node) => {
-      return node.value !== "xmlTag" && node.value !== "xmlAttribute";
-    });
-
-    let xml_tags = xml_semantics.filter((node) => {
-      return node.value === "xmlTag";
-    });
-
-    let xml_attributes = xml_semantics.filter((node) => {
-      return node.value === "xmlAttribute";
-    });
-    // ##################### ######### #####################
-
-    console.log(`used variables: ${JSON.stringify(used_variables, AST.removeParentAndChildren, 2)}`);
-    console.log(`!!!!!!unused functions: ${JSON.stringify(unusedFunctions, AST.removeParentAndChildren, 2)}`);
-
-
-  const all_tokens = [
-      ...used_variables.map(node => ({node, type: 8})),
-      ...unused_variables.map(node => ({node, type: 9})),
-      ...string_constants.map(node => ({node, type: 19})),
-      ...constants.map(node => ({node, type: 20})),
-      ...xml_declaration.map(node => ({node, type: 23})),
-      ...xml_tags.map(node => (({node, type: 24}))),
-      ...xml_attributes.map(node => (({node, type: 25}))),
-      ...projections.map(node => (({node, type: 26}))),
-      ...unusedFunctions.map(node => (({node, type: 27}))),
-      ...usedFunctions.map(node => ({node, type: 28})),
-      ...functionCallers.map(node => ({node, type: 28})),
-  ].sort((a, b) => {
-      if (!a.node.range || !b.node.range) {
-        return 0;
-      }
-      if (a.node.range.start.line !== b.node.range.start.line) {
-        return a.node.range.start.line - b.node.range.start.line;
-      }
-      return a.node.range.start.character - b.node.range.start.character;
-  });
-
-  // (1) identify all XML ranges
-  // (2) For each XML range, perform Regex to make sure token ranges are correct
-  const XMLRanges = AST.xmlParser.extractXMLRanges(ast);
-
-  for(let node of all_tokens){
-    let is_inside_xml = false;
-    for(const range of XMLRanges){
-      if(AST.isInRange(node.node.range, range)){
-        is_inside_xml = true;
-        break;
-      }
-    }
-    if(
-      is_inside_xml === true && 
-      node.type !== 23 &&
-      node.type !== 24 &&
-      node.type !== 25
-    ){
-      console.log("Is inside XML, so calling adjust Ranges!");
-      console.log(`node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
-      node.node.range = AST.xmlParser.adjustRanges(node.node, documentText!, node.type);
-
-    } else {
-      continue;
-    }
-  }
-
-
-
-
-  // Add to builder in sorted order
-  for (const {node, type} of all_tokens) {
-      if(node.range.start.line === 1) {
-          builder.push(
-              node.range.start.line-2,
-              node.range.start.character-2,
-              (node.range.end.character - node.range.start.character),
-              type,
-              0
-          );
-      } else {
-          builder.push(
-              node.range.start.line-2,
-              node.range.start.character-1,
-              (node.range.end.character - node.range.start.character),
-              type,
-              0
-          );
-      }
-  }
-
-  let tokens = builder.build();
-  // this.connection.sendNotification('custom/refreshSemanticTokens', { uri: document.uri });
-  console.log(`[onRequestFull] tokens: ${JSON.stringify(tokens.data)}`);
-  return tokens;
   } catch (e) {
     console.error(`[onRequestFull] Error: ${e}`);
   } finally {
     await this.validateTextDocument(params.textDocument);
     
   }
+
 }
 
   private async onRequestFullDelta(params: any) {
@@ -1198,11 +970,46 @@ export class LanguageServer {
     return semanticTokens;
   }
 
+  private async HandleASTAndDocumentText(params: any): Promise<{ast: AST.ASTNode | null, documentText: string}> {
+    let ast;
+    let documentText = "";
+    if(this.documentsMap.has(params.textDocument.uri)) {
+      // map is only setup when the doc changes
+      ast = await this.getASTFromText(this.documentsMap.get(params.textDocument.uri)!);
+      documentText = this.documentsMap.get(params.textDocument.uri)!;
+    } else {
+      // this is for when the file is first loaded
+      ast = await this.getAST(params);
+      let temp = this.documents.get(params.textDocument.uri);
+      if(temp === null){
+        return {ast: null, documentText: ""};
+      }
+      documentText = temp!.getText();
+    }
 
 
-  private async onRequestRange(params: any) {
-    const semanticTokens = {data: []} as unknown as SemanticTokens;
-    console.log(`[onRequestRange] called`);
+    if(!ast){
+      if(lastAst === null){
+        return {ast: null, documentText: ""};
+      }
+      ast = lastAst;
+    } else {
+      lastAst = ast;
+    }
+    return {ast, documentText};
+  }
+
+  private async onRequestRange(params: SemanticTokensRangeParams): Promise<SemanticTokens | null> {
+    let semanticTokens = {data: []} as unknown as SemanticTokens;
+
+    let {ast, documentText} = await this.HandleASTAndDocumentText(params);
+    if(ast === null){
+      return semanticTokens;
+    }
+
+
+    const node = new LSPFeatureHandler(ast, params.textDocument.uri);
+    semanticTokens = node.BuildSemanticTokensRange(documentText, params.range);
     // return await this.onRequestFull (params);
     return semanticTokens;
   }
@@ -1228,6 +1035,3 @@ server.start();
   console.error(`[LanguageServer] Error: ${e}`);
 }
 
-// Fun position: {"start": {"line": 2, "col": 1}, "finish": {"line": 4, "col": 2}}
-// Val position: {"start": {"line": 2, "col": 1}, "finish": {"line": 2, "col": 10}}
-// Variable position: {"start": {"line": 2, "col": 1}, "finish": {"line": 2, "col": 10}}

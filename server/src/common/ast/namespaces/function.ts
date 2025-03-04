@@ -94,20 +94,19 @@ export namespace Function{
         while(FunctionConditions.hasNotReachedParentScope(currentScope)){
             currentScope = currentScope.parent!;
         }
-        console.log(`traversed up until: ${JSON.stringify(currentScope.range)}`);
 
         
 
         // Avoids recomputation of all local definitions
         let LocalDefinitions = ExtractLocalDefinitions(currentScope);
-        console.log(`[Function] Local definitions: ${JSON.stringify(Array.from(LocalDefinitions.keys()))}`);
+        // console.log(`[Function] Local definitions: ${JSON.stringify(Array.from(LocalDefinitions.keys()))}`);
         if(LocalDefinitions.has(funName)){
-            console.log(`[Function] Found local definition for ${funName}!`);
+            // console.log(`[Function] Found local definition for ${funName}!`);
             let localDefNodes = LocalDefinitions.get(funName)!;
             // console.log(`[Function] Local definitions: ${JSON.stringify(localDefNodes.map(node => node.range))}`);
             let defNode = ExtractExactDefinition(localDefNodes, currentScope, funNode);
             if(defNode === null){
-                console.log(`[Function] Could not find definition for ${funName}!`);
+                // console.log(`[Function] Could not find definition for ${funName}!`);
                 return funNode; // If there's an error, return funNode
             }
             return createScopeNode(currentScope, defNode);
@@ -222,7 +221,6 @@ export namespace Function{
                 let funNode: AST.ASTNode = currentNode;
 
                 if(FunctionConditions.isFunctionReferenceInFormBinding(currentNode)){
-                    console.log(`inside form binding`);
                     funName = Variable.getName(currentNode);
                     scopeNode = currentNode.parent!;
                     let newRange = Range.create(
@@ -246,9 +244,7 @@ export namespace Function{
                     // } as FunctionNode;
                     // addToXNode(references, funName, functionNode);
                 } else if (FunctionConditions.isFormletPlacement(currentNode)) {
-                    console.log(`inside formlet placement`);
                     funName = Variable.getName(currentNode);
-                    console.log(`looking scope for ${funName}`);
                     scopeNode = currentNode.parent!;
 
                     // scopeNode = getScope(currentNode, currentNode);
@@ -291,8 +287,8 @@ export namespace Function{
                 }
 
                 if(scopeNode && funNode){
-                    console.log(`scope for ${funName}`)
-                    console.log(`found scope: ${JSON.stringify(scopeNode.range)}`)
+                    // console.log(`scope for ${funName}`)
+                    // console.log(`found scope: ${JSON.stringify(scopeNode.range)}`)
                     let functionNode = {
                         function: funNode,
                         scope: scopeNode
@@ -317,6 +313,10 @@ export namespace Function{
     export function ExtractNumParamsFromDef(node: AST.ASTNode): number {
         // console.log(`[ExtractNumParamsFromDef] node: ${JSON.stringify(node, AST.removeParentField, 2)}`);
         return node.children![1].children!.length-1;
+    }
+
+    export function ExtractParamsFromDef(node: AST.ASTNode): AST.ASTNode[]{
+        return node.children![1].children!.slice(0, -1);
     }
 
     export function hasSignature(node: AST.ASTNode){

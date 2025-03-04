@@ -273,6 +273,44 @@ export namespace AST {
         traverse(node);
     }
 
+    function CreateAdjustedConstant(idx: number, content: string, node: ASTNode, parent: ASTNode, valueName: string): AST.ASTNode{
+        if(idx === 0){
+            return {
+                type: "Leaf",
+                value: `${valueName}: "${content}"`,
+                range: Range.create(
+                    Position.create(
+                        node.range.start.line, 
+                        node.range.start.character
+                    ),
+                    Position.create(
+                        node.range.start.line, 
+                        node.range.start.character+content.length+1
+                    )
+                ),
+                parent: parent
+            };
+        } else {
+            let leading_whitespace = content.match(/^\s*/);
+            return {
+                type:"Leaf",
+                value: `${valueName}: "${content}"`,
+                range: Range.create(
+                    Position.create(
+                        node.range.start.line+idx,
+                        leading_whitespace![0].length
+                    ),
+                    Position.create(
+                        node.range.start.line+idx,
+                        content.length+2
+                    )
+                ),
+                parent: parent
+
+            } as AST.ASTNode;
+        }
+    }
+
     function adjustContentForNewLines(node: AST.ASTNode): void{
         function traverse(currentNode: AST.ASTNode) {
 
@@ -289,43 +327,45 @@ export namespace AST {
                             const num_new_lines = content_split_by_newline.length;
                             for(let j = 0; j < num_new_lines; j++){
                                 let curr_content = content_split_by_newline[j];
-                                if(j === 0){
-                                    new_children.push({
-                                        type:"Leaf",
-                                        value: `Constant: "${curr_content}"`,
-                                        range: Range.create(
-                                            Position.create(
-                                                curr_child.range.start.line+j,
-                                                curr_child.range.start.character
-                                            ),
-                                            Position.create(
-                                                curr_child.range.start.line+j,
-                                                curr_child.range.start.character+curr_content.length+1
-                                            )
-                                        ),
-                                        parent: currentNode
+                                let new_node = CreateAdjustedConstant(j, curr_content, curr_child, currentNode, "Constant");
+                                new_children.push(new_node);
+                                // if(j === 0){
+                                //     new_children.push({
+                                //         type:"Leaf",
+                                //         value: `Constant: "${curr_content}"`,
+                                //         range: Range.create(
+                                //             Position.create(
+                                //                 curr_child.range.start.line+j,
+                                //                 curr_child.range.start.character
+                                //             ),
+                                //             Position.create(
+                                //                 curr_child.range.start.line+j,
+                                //                 curr_child.range.start.character+curr_content.length+1
+                                //             )
+                                //         ),
+                                //         parent: currentNode
 
-                                    } as AST.ASTNode);
-                                }  else {
-                                    let leading_whitespace = curr_content.match(/^\s*/);
+                                //     } as AST.ASTNode);
+                                // }  else {
+                                //     let leading_whitespace = curr_content.match(/^\s*/);
 
-                                    new_children.push({
-                                        type:"Leaf",
-                                        value: `Constant: "${curr_content}"`,
-                                        range: Range.create(
-                                            Position.create(
-                                                curr_child.range.start.line+j,
-                                                leading_whitespace![0].length
-                                            ),
-                                            Position.create(
-                                                curr_child.range.start.line+j,
-                                                curr_content.length+2
-                                            )
-                                        ),
-                                        parent: currentNode
+                                //     new_children.push({
+                                //         type:"Leaf",
+                                //         value: `Constant: "${curr_content}"`,
+                                //         range: Range.create(
+                                //             Position.create(
+                                //                 curr_child.range.start.line+j,
+                                //                 leading_whitespace![0].length
+                                //             ),
+                                //             Position.create(
+                                //                 curr_child.range.start.line+j,
+                                //                 curr_content.length+2
+                                //             )
+                                //         ),
+                                //         parent: currentNode
 
-                                    } as AST.ASTNode);
-                                }
+                                //     } as AST.ASTNode);
+                                // }
                             }
                         } else {
                             new_children.push(curr_child);
@@ -333,6 +373,35 @@ export namespace AST {
                     }
                     currentNode.children = new_children;
                 }
+            }
+
+            if(currentNode.value === "Xml"){
+                let xml_children = currentNode.children;
+                if(xml_children){
+                    let new_children: ASTNode[] = [];
+                    for(let i = 0; i < xml_children.length; i++){
+                        let curr_child = xml_children[i];
+
+
+                        // Adjust the range informtion of TextNode if we have \n
+                        if(curr_child.value.substring(0,9) === "TextNode:"){
+                            let contents = curr_child.value.substring(10, curr_child.value.length);
+                            contents = contents.replace(/\\n/g, '\n');
+                            let content_split_by_newline = contents.split("\n");
+                            const num_new_lines = content_split_by_newline.length;
+                            for(let j = 0; j < num_new_lines; j++){
+                                let curr_content = content_split_by_newline[j];
+                                let new_node = CreateAdjustedConstant(j, curr_content, curr_child, currentNode, "TextNode");
+                                new_children.push(new_node);
+                            }
+
+                        } else {
+                            new_children.push(curr_child);
+                        }
+                    }
+                    currentNode.children = new_children;
+                }
+
             }
 
 
@@ -640,6 +709,47 @@ export namespace AST {
 
         return foundNode; 
     }
+
+    export function findNodeAtPositionForRename(ast: ASTNode, position: Position): ASTNode | null {
+        // This will hold our best match
+    let bestMatch: ASTNode | null = null;
+    let smallestArea = Number.MAX_VALUE;
+    
+    function traverse(node: ASTNode) {
+        // Calculate if position is within node range
+        const isWithinRange = (
+            (position.line > node.range.start.line || 
+             (position.line === node.range.start.line && position.character >= node.range.start.character)) &&
+            (position.line < node.range.end.line || 
+             (position.line === node.range.end.line && position.character <= node.range.end.character))
+        );
+        
+        if (isWithinRange) {
+            // Calculate area of the node's range (to find most specific node)
+            const linesSpanned = node.range.end.line - node.range.start.line;
+            const area = linesSpanned === 0 ? 
+                (node.range.end.character - node.range.start.character) : 
+                (linesSpanned * 100 + node.range.end.character - node.range.start.character);
+            
+            // Update bestMatch if this node has smaller area
+            if (area < smallestArea) {
+                bestMatch = node;
+                smallestArea = area;
+            }
+        }
+        
+        // Recursively check children
+        if (node.children) {
+            for (const child of node.children) {
+                traverse(child);
+            }
+        }
+    }
+    
+    traverse(ast);
+    return bestMatch;
+    }
+
 
     export function getClosestNodeFromAST(ast: ASTNode, position: Position): ASTNode {
         let ret: ASTNode = ast;

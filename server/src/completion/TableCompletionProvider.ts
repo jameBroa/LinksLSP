@@ -96,16 +96,17 @@ import {TableColumn } from '../extension';
       });
   
       ret_str = ret_str.slice(0, -2);
-      ret_str += `) from ${db_name};`;
-  
+      // ret_str += `) from ${db_name};`;
+      ret_str += `) from`;
+
       return ret_str;
     }
     
     public async provideCompletions(
-        document: { getText: () => string },
+        documentText: string,
         position: Position
       ): Promise<CompletionItem[]> {
-        const text = document.getText();
+        const text = documentText;
         const currentLine = text.split('\n')[position.line];
         const linePrefix = currentLine.slice(0, position.character);
         

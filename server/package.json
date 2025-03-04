@@ -24,9 +24,9 @@
 		"test:onDefinition": "mocha test/LanguageServer/onDefinition/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
 		"test:onReferences": "mocha test/LanguageServer/onReferences/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
 		"test:validateTextDocument": "mocha test/LanguageServer/validateTextDocument/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs"
-
 	},
 	"devDependencies": {
+		"@types/execa": "^0.9.0",
 		"@types/sinon": "^17.0.3",
 		"@vscode/test-cli": "^0.0.10",
 		"@vscode/test-electron": "^2.4.1",
