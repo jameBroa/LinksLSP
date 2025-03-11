@@ -204,6 +204,8 @@ export function activate(context: ExtensionContext) {
 				await vscode.commands.executeCommand('vscode.provideDocumentSemanticTokens', editor.document);
 			}
 		});
+		client.sendNotification('custom/updateServerPath', {serverPath: serverPath});
+
 	});
 	const selector = {language: 'links', scheme: 'file'};
 	vscode.languages.registerDocumentSemanticTokensProvider(selector, provider, legend);

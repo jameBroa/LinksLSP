@@ -35,7 +35,8 @@ import {
   TextDocumentContentChangeEvent,
   SemanticTokensRangeParams,
   RenameParams,
-  WorkspaceEdit
+  WorkspaceEdit,
+  DocumentSymbol
 } from 'vscode-languageserver';
 
 import { AST } from './common/ast/ast';
@@ -127,6 +128,7 @@ export class LanguageServer {
     this.connection.onNotification('custom/updateDatabaseConfig', this.onNotification.bind(this));
     this.connection.onNotification('custom/updateServerPath', this.onUpdateServerPath.bind(this));
     this.connection.onCompletion(this.onCompletion.bind(this));
+    this.connection.onDocumentSymbol(this.onDocumentSymbol.bind(this));
 
     // this.connection.onRequest("textDocument/semanticTokens/full", 
     //   lodash.debounce(
@@ -162,6 +164,7 @@ export class LanguageServer {
           referencesProvider: true,
           renameProvider: true,
           hoverProvider: true,
+          documentSymbolProvider: true,
           textDocumentSync: TextDocumentSyncKind.Incremental,
           semanticTokensProvider: {
             legend: {
@@ -228,7 +231,20 @@ export class LanguageServer {
   }
 
   private async onUpdateServerPath(data: {serverPath: string}) {
-    this.ocamlClient.Update_ServerPath(data.serverPath);
+    console.log(`[onUpdateServerPath] triggered update!`);
+    await this.ocamlClient.Update_ServerPath(data.serverPath);
+  }
+
+  public async onDocumentSymbol(params: any): Promise<DocumentSymbol[]> {
+    const {ast, documentText} = await this.HandleASTAndDocumentText(params);
+    if(ast === null || documentText === "") {
+      return [];
+    }
+
+    const handler = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
+    return handler.GetDocumentSymbols();
+
+
   }
 
   public async onRename(params: RenameParams): Promise<WorkspaceEdit | null> {
@@ -285,8 +301,8 @@ export class LanguageServer {
     }
 
     if(env === ENV_MODE.FAST) {
-      node.PrintAllFunVarRefNDef();
-      console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
+      // node.PrintAllFunVarRefNDef();
+      // console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
 
       return LinksNodeReferences;
     }
@@ -490,8 +506,8 @@ export class LanguageServer {
 
     try {
         // Write the in-memory content to the temporary file
-        await fs.writeFile(tempFilePath, `fun dummy_wrapper(){\n${documentContent}\n}`, 'utf8');
-        console.log(`[LanguageServer.getASTFromText] content to generate ast on: \n"fun dummy_wrapper(){\n${documentContent}\n}"`);
+        await fs.writeFile(tempFilePath, `fun dummy_wrapper(){\n${documentContent}\n()\n}`, 'utf8');
+        // console.log(`[LanguageServer.getASTFromText] content to generate ast on: \n"fun dummy_wrapper(){\n${documentContent}\n}"`);
         const tempFileContent = await fs.readFile(tempFilePath, 'utf8');
 
         // Send the temporary file to the parser
@@ -693,6 +709,8 @@ export class LanguageServer {
       return null;
     }
 
+    console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
+
     const referenceNode = AST.getClosestNodeFromAST(ast, Position.create(params.position.line+2, params.position.character));
     const featureHandler = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
     console.log(`referenceNode.value: ${referenceNode.value}`);
@@ -729,10 +747,13 @@ export class LanguageServer {
         return result;
   }
   public async validateTextDocument(textDocument: TextDocument): Promise<Diagnostic[]> {
+    // let {ast, documentText} = await this.HandleASTAndDocumentText(textDocument);
     let ast: AST.ASTNode | null;
+    let documentText;
     if(this.documentsMap.has(textDocument.uri)) {
       // map is only setup when the doc changes
       ast = await this.getASTFromText(this.documentsMap.get(textDocument.uri)!);
+      documentText = this.documentsMap.get(textDocument.uri);
     } else {
       // this is for when the file is first loaded
       let payload = {
@@ -743,15 +764,18 @@ export class LanguageServer {
           0, 0
         )
       } as TextDocumentPositionParams;
+      documentText = this.documents.get(textDocument.uri)!.getText();
+
+
       ast = await this.getAST(payload);
     }
 
-    if(!ast || ast === null) {
+    if(!ast || ast === null || !documentText) {
       return [];
     }
 
     const node = new LSPFeatureHandler(ast.children![0], textDocument.uri); 
-    const LinksNodeDiagnostics = node.GetDiagnostics(this.hasDiagnosticRelatedInformationCapability);
+    const LinksNodeDiagnostics = await node.GetDiagnostics(this.hasDiagnosticRelatedInformationCapability, documentText);
     // node.PrintAllFunVarRefNDef();
     if(env === ENV_MODE.FAST){
       this.connection.sendDiagnostics({
@@ -910,13 +934,14 @@ export class LanguageServer {
     // is achieved so the problem described in DocumentManipulator.AdjustDocument is resolved!
 
     await this.onRequestFull(params);
-    this.connection.sendNotification('custom/refreshSemanticTokens', { uri: document.uri });
+    // this.connection.sendNotification('custom/refreshSemanticTokens', { uri: document.uri });
     // this.connection.sendRequest('workspace/semanticTokens/refresh');
 
   }
   
 
   public async onRequestFull(params: any) {
+    // return await this.onRequestRange(params);
     try {
     console.log(`[onRequestFull] called`);
     let ast;
@@ -1001,16 +1026,16 @@ export class LanguageServer {
 
   private async onRequestRange(params: SemanticTokensRangeParams): Promise<SemanticTokens | null> {
     let semanticTokens = {data: []} as unknown as SemanticTokens;
-
+    return semanticTokens;
     let {ast, documentText} = await this.HandleASTAndDocumentText(params);
-    if(ast === null){
+    if(ast === null || documentText === ""){
       return semanticTokens;
     }
 
 
     const node = new LSPFeatureHandler(ast, params.textDocument.uri);
     semanticTokens = node.BuildSemanticTokensRange(documentText, params.range);
-    // return await this.onRequestFull (params);
+    return await this.onRequestFull (params);
     return semanticTokens;
   }
   private onCompletionResolve(item: CompletionItem): CompletionItem {

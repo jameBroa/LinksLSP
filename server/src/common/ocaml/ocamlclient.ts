@@ -20,9 +20,11 @@ export class OCamlClient{
     
 
     private connect(): Promise<net.Socket> {
+        console.log("[OCamlClient] Connecting to OCaml server...");
         return new Promise((resolve, reject) => {
             const client = new net.Socket();
             client.connect(this.connection_port, this.connection_url, () => {
+                console.log(`[OCamlClient] Connected to OCaml server at ${this.connection_url}:${this.connection_port}`);
                 resolve(client);
             });
 
@@ -183,13 +185,40 @@ export class OCamlClient{
                 cwd: ServerDir
             });
 
-            this.serverProcess.unref();
+//             // Set up event listeners for stdout
+// if (this.serverProcess.stdout) {
+//     this.serverProcess.stdout.on('data', (data) => {
+//         console.log(`[OCamlServer stdout] ${data.toString().trim()}`);
+//     });
+// }
+
+// // Set up event listeners for stderr
+// if (this.serverProcess.stderr) {
+//     this.serverProcess.stderr.on('data', (data) => {
+//         console.error(`[OCamlServer stderr] ${data.toString().trim()}`);
+//     });
+// }
+
+// // Set up handler for process exit
+// this.serverProcess.on('exit', (code, signal) => {
+//     console.log(`[OCamlClient] Server process exited with code ${code} and signal ${signal}`);
+// });
+
+// // Set up handler for errors
+// this.serverProcess.on('error', (err) => {
+//     console.error(`[OCamlClient] Failed to start server process: ${err}`);
+// });
+
+            this.serverProcess.unref(); 
+
+            console.log(`[OCamlClient] Started server process with PID ${this.serverProcess.pid}`);
 
             await new Promise(resolve => setTimeout(resolve, 3000));
             return true;
 
         } catch (e){
             this.serverProcess = null;
+            console.log(`not even starting`)
             console.log(`[OCamlClient] Error starting OCaml server: ${e}`);
             return false;
         }

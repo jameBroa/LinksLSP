@@ -6,13 +6,21 @@ import { Variable } from "../namespaces/variable";
 import { Function } from "../namespaces/function";
 
 function GetValidVarReferences(
+    node: AST.ASTNode,
     VarRefs: VariableNode[], 
     VarDefs: VariableNodeDef[], 
     References: Location[],
     uri: string): void {
     for(const ref of VarRefs){
         for(const def of VarDefs){
-            if(AST.isInRange(ref.variable.range, def.scope.range)){
+            console.log(`node.range: ${JSON.stringify(node.range)}`);
+            console.log(`def.scope.range: ${JSON.stringify(def.scope.range)}`);
+            console.log(`ref.variable.range: ${JSON.stringify(ref.variable.range)}`);
+            
+            if(
+                AST.isInRange(node.range, def.scope.range) &&
+                AST.isInRange(ref.variable.range, def.scope.range)
+            ){
                 References.push(Location.create(
                     uri,
                     ref.variable.range
@@ -55,13 +63,18 @@ export function References(
     functionReferences: Map<string, FunctionNode[]>
 ): Location[] {
     let References: Location[] = [];
+    // console.log(`[References] node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
     if(IsOnDefinitionVariable(node)){
         let varName = Variable.getName(node);
+
+        // console.log(`getting references for ${varName}`);
+
+
         let VariableDefinitions = variableDefinitions.get(varName);
         let VariableReferences = variableReferences.get(varName);
 
         if(VariableReferences && VariableDefinitions){
-            GetValidVarReferences(VariableReferences, VariableDefinitions, References, uri);
+            GetValidVarReferences(node, VariableReferences, VariableDefinitions, References, uri);
         }
 
         References.push(Location.create(

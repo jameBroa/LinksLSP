@@ -599,7 +599,7 @@ export namespace AST {
             let startNode = ast!.children![0];
             processFunction(startNode, new Map());
             
-            console.log(`[ast.undefinedfunctions] ${JSON.stringify(undefinedFunctions, removeParentAndChildren, 2)}`)
+            console.log(`[ast.undefinedfunctions] ${JSON.stringify(undefinedFunctions, removeParentAndChildren, 2)}`);
 
 
             type DiagnosticInfo = {
@@ -2725,6 +2725,27 @@ export namespace AST {
 
         // Returns the original range if no match is found
         return nodeRange;
+    }
+
+    export function extractRegexPositionFromFullDoc(documentText: string, targetString: string): Range | null{
+        console.log(`[starting extraction]....`);
+        console.log(`looking for: "${targetString}"`)
+        const documentByLine = documentText.split("\n");
+        const startLine = 0;
+        const endLine = documentByLine.length;
+        for(let i = startLine; i < endLine; i++) {
+            const line = documentByLine[i];
+            const startIndex = line.indexOf(targetString);
+            if (startIndex !== -1) {
+                // Found the target string in this line
+                return Range.create(
+                    Position.create(i, startIndex),
+                    Position.create(i, startIndex + targetString.length)
+                );
+            }
+
+        }
+        return null;
     }
 
 

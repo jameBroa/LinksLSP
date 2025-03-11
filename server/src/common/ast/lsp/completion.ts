@@ -1,6 +1,7 @@
 import { CompletionItem, CompletionItemKind, Position } from "vscode-languageserver";
 import { FunctionNodeDef, VariableNodeDef } from "../node";
 import { TableCompletionProvider } from "../../../completion/TableCompletionProvider";
+import { LinksParserConstants } from "../../constants";
 
 // function CalculateCurrentToken(pos: Position, documentText: string): string{
 //     const documentByLine = documentText.split('\n');
@@ -65,7 +66,7 @@ function CalculateTokenContext(pos: Position, documentText: string): { currentTo
     let currentStartIdx = charPos;
     while (currentStartIdx > 0) {
         // If we hit a character that's not valid in a variable/function name, stop
-        if (!/[a-zA-Z0-9_]/.test(currentLine[currentStartIdx - 1])) {
+        if (!/[a-zA-Z0-9_<>:]/.test(currentLine[currentStartIdx - 1])) {
             break;
         }
         currentStartIdx--;
@@ -77,7 +78,7 @@ function CalculateTokenContext(pos: Position, documentText: string): { currentTo
     // Find the previous token
     let prevEndIdx = currentStartIdx - 1;
     // Skip whitespace and separators
-    while (prevEndIdx >= 0 && /[\s\t,;(){}[\]=+\-*/%<>!&|^~]/.test(currentLine[prevEndIdx])) {
+    while (prevEndIdx >= 0 && /[\s\t,;(){}[\]=+\-*/%!&|^~]/.test(currentLine[prevEndIdx])) {
         prevEndIdx--;
     }
     
@@ -88,7 +89,7 @@ function CalculateTokenContext(pos: Position, documentText: string): { currentTo
         let prevStartIdx = prevEndIdx;
         while (prevStartIdx > 0) {
             // If we hit a character that's not valid in a token, stop
-            if (/[\s\t,;(){}[\]=+\-*/%<>!&|^~]/.test(currentLine[prevStartIdx - 1])) {
+            if (/[\s\t,;(){}[\]=+\-*/%!&|^~]/.test(currentLine[prevStartIdx - 1])) {
                 break;
             }
             prevStartIdx--;
@@ -145,6 +146,113 @@ async function addTableCompletion(
         }
 }
 
+function addBuiltInFunctionCompletion(currentToken: string, ret: CompletionItem[]): void{
+    if (currentToken === '') {
+        // Limit to a reasonable number of items for performance
+        const items = Array.from(LinksParserConstants.LINKS_FUNCS).slice(0, 100);
+        for (const item of items) {
+            ret.push({
+                label: item,
+                kind: CompletionItemKind.Function
+            });
+        }
+        return;
+    }
+    
+    // For non-empty token, filter by prefix (case-insensitive)
+    const lowerToken = currentToken.toLowerCase();
+    
+    // For small sets, direct filtering is fine
+    if (LinksParserConstants.LINKS_FUNCS.size < 1000) {
+        for (const item of LinksParserConstants.LINKS_FUNCS) {
+            if (item.toLowerCase().startsWith(lowerToken)) {
+                ret.push({
+                    label: item,
+                    kind: CompletionItemKind.Function
+                    
+                });
+            }
+        }
+    } else {
+        // For larger sets, convert to array first to avoid multiple iterations
+        const matches = Array.from(LinksParserConstants.LINKS_FUNCS)
+            .filter(item => item.toLowerCase().startsWith(lowerToken))
+            .slice(0, 100); // Limit results
+            
+        for (const item of matches) {
+            ret.push({
+                label: item,
+                kind: CompletionItemKind.Function
+            });
+        }
+    }
+}
+
+function addXmlTagCompletion(
+    previousToken: string,
+    cursorPos: Position,
+    documentText: string,
+    ret: CompletionItem[]
+): void {
+    // const lines = documentText.split('\n');
+    // const lineIndex = cursorPos.line - 2;
+    
+    // if (lineIndex < 0 || lineIndex >= lines.length) {return;}
+    
+    // const currentLine = lines[lineIndex];
+    // const textBeforeCursor = currentLine.substring(0, cursorPos.character);
+    
+    // // Check if cursor is right after a ">"
+    // if (!textBeforeCursor.endsWith('>')) {return;}
+
+    let textBeforeCursor = previousToken;
+
+    console.log(`[addXmlTagCompletion] textBeforeCursor: ${textBeforeCursor}`);
+    
+    // More robust pattern to find the tag, accounting for attributes
+    // This looks for the last opening tag that isn't closed and isn't self-closing
+    const openTagRegex = /<([a-zA-Z][a-zA-Z0-9_:-]*)(?:[^<>"']*|"[^"]*"|'[^']*')*>$/;
+    const selfClosingRegex = /<[^>]*\/>$/;
+    const closingTagRegex = /<\/[^>]+>$/;
+    
+    // If it's a self-closing or closing tag, don't offer completion
+    if (selfClosingRegex.test(textBeforeCursor) || closingTagRegex.test(textBeforeCursor)) {
+        return;
+    }
+    
+    const match = textBeforeCursor.match(openTagRegex);
+    if (match) {
+        console.log(`inside match for [addXmlTagCompletion]`);
+        const tagName = match[1];
+        
+        // Check if we're creating a Links XML tag (all Links XML tags start with "l:")        
+        ret.push({
+            label: `</${tagName}>`,
+            kind: CompletionItemKind.Snippet,
+            insertText: `$0</${tagName}>`,
+            insertTextFormat: 2,
+            sortText: "0",
+            preselect: true,
+            detail: `Close <${tagName}> tag`
+            // insertText: isLinksTag ? 
+            //     `\n\t$0\n</${tagName}>` : 
+            //     `$0</${tagName}>`,
+            // insertTextFormat: 2, // InsertTextFormat.Snippet
+            // detail: `Auto-close <${tagName}> tag`,
+            // preselect: true,
+            // textEdit: {
+            //     range: {
+            //         start: { line: cursorPos.line, character: cursorPos.character },
+            //         end: { line: cursorPos.line, character: cursorPos.character }
+            //     },
+            //     newText: isLinksTag ? 
+            //         `\n\t$0\n</${tagName}>` : 
+            //         `$0</${tagName}>`
+            // }
+        });
+    }
+}
+
 
 
 export async function OnCompletion(
@@ -160,7 +268,8 @@ export async function OnCompletion(
 
     // let currentToken = CalculateCurrentToken(cursorPos, documentText);
     let { currentToken, previousToken } = CalculateTokenContext(cursorPos, documentText);
-    
+    addXmlTagCompletion(previousToken, cursorPos, documentText, ret);
+
     // specific completion scenarios
     switch(previousToken){
         case "table":
@@ -170,7 +279,7 @@ export async function OnCompletion(
             // skip
             break;
     }
-
+    addBuiltInFunctionCompletion(currentToken, ret);
     addVariableCompletion(currentToken, variableDefinitions, ret);
     addFunctionCompletion(currentToken, functionDefinitions, ret);
     return ret;

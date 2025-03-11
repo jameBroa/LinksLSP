@@ -93,7 +93,7 @@ export function Rename(
 
 ): WorkspaceEdit | null {
 
-
+    console.log(`[Rename] node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
     if(node.value.startsWith("Variable:") && node.parent!.value === "Val"){
         let varNodeDef = findExactVarDefinition(node, variableDefinitions);
         if(varNodeDef){
@@ -107,6 +107,22 @@ export function Rename(
             }
             return {changes};
         }
+    } else if(node.value === "Val" && node.children![0].value.startsWith("Variable:")){
+        let varNodeDef = findExactVarDefinition(node.children![0], variableDefinitions);
+        if(varNodeDef){
+            let allReferencesToDef = findAllVarReferencesToDef(varNodeDef, variableReferences);
+
+            const changes: {[uri: string]: TextEdit[]} = {};
+            changes[uri] = [];
+            changes[uri].push(TextEdit.replace(adjustRangeBackwards(varNodeDef.variableDefinition.range, newName), newName));
+            for(const ref of allReferencesToDef){
+                changes[uri].push(TextEdit.replace(adjustRangeBackwards(ref.variable.range, newName), newName));
+            }
+            return {changes};
+        }
+
+
+
     } else if(node.value === "Fun"){
         console.log(`node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
         let funNodeDef = findExactFunDefinition(node, functionDefinitions);

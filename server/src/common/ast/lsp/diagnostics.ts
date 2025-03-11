@@ -1,9 +1,16 @@
-import { Diagnostic, DiagnosticSeverity, Position } from "vscode-languageserver";
+import {Diagnostic, DiagnosticSeverity, Position, Range} from "vscode-languageserver";
 import { AST } from "../ast";
 import { RangeReplacer } from "../namespaces/range";
 import { Function } from "../namespaces/function";
 import { FunctionNode, FunctionNodeDef, VariableNode, VariableNodeDef } from "../node";
 import { LinksParserConstants } from "../../constants";
+import * as os from "os";
+import path from "path";
+import * as fs from "fs";
+import * as childProcess from "child_process";
+import extractRegexPosition = AST.extractRegexPosition;
+import extractRegexPositionFromFullDoc = AST.extractRegexPositionFromFullDoc;
+
 
 type DiagnosticInfo = {
     node: AST.ASTNode,
@@ -13,7 +20,8 @@ type DiagnosticInfo = {
 
 function CreateUndefinedVariableDiagnostics(
     variableReferences: Map<string, VariableNode[]>,
-    variableRefToDef: Map<AST.ASTNode, AST.ASTNode>
+    variableRefToDef: Map<AST.ASTNode, AST.ASTNode>,
+    functionDefinitions: Map<string, FunctionNodeDef[]>  // Add this parameter
 ): DiagnosticInfo[] {
     let UndefinedVariableDiagnostic: DiagnosticInfo[] = [];
     for(const key of variableReferences.keys()){
@@ -21,7 +29,11 @@ function CreateUndefinedVariableDiagnostics(
         if(refs){
             for(const ref of refs){
                 let defOfRef = variableRefToDef.get(ref.variable);
-                if(defOfRef === undefined && !LinksParserConstants.LINKS_VARS.has(key)){
+                // Check if it's undefined as a variable AND not a built-in AND not a function
+                if(defOfRef === undefined && 
+                   !LinksParserConstants.LINKS_VARS.has(key) &&
+                   !LinksParserConstants.LINKS_FUNCS.has(key) &&
+                   !functionDefinitions.has(key)) {  // Add this check
                     UndefinedVariableDiagnostic.push(
                         {
                             node: ref.variable,
@@ -33,9 +45,34 @@ function CreateUndefinedVariableDiagnostics(
             }
         }   
     }
-    // console.log(`[LinksNode] UndefinedVariableDiagnostic: "${JSON.stringify(UndefinedVariableDiagnostic, AST.removeParentAndChildren, 2)}"`);
     return UndefinedVariableDiagnostic;
 }
+
+// function CreateUndefinedVariableDiagnostics(
+//     variableReferences: Map<string, VariableNode[]>,
+//     variableRefToDef: Map<AST.ASTNode, AST.ASTNode>
+// ): DiagnosticInfo[] {
+//     let UndefinedVariableDiagnostic: DiagnosticInfo[] = [];
+//     for(const key of variableReferences.keys()){
+//         let refs = variableReferences.get(key);
+//         if(refs){
+//             for(const ref of refs){
+//                 let defOfRef = variableRefToDef.get(ref.variable);
+//                 if(defOfRef === undefined && !LinksParserConstants.LINKS_VARS.has(key)){
+//                     UndefinedVariableDiagnostic.push(
+//                         {
+//                             node: ref.variable,
+//                             firstMessage: `Variable ${key} is not defined`,
+//                             secondMessage: `Consider defining ${key} before using it`
+//                         }
+//                     );
+//                 }
+//             }
+//         }   
+//     }
+//     // console.log(`[LinksNode] UndefinedVariableDiagnostic: "${JSON.stringify(UndefinedVariableDiagnostic, AST.removeParentAndChildren, 2)}"`);
+//     return UndefinedVariableDiagnostic;
+// }
 
 function GetVarsDefinedInSameScope(Definitions: VariableNodeDef[], map: Map<Position, AST.ASTNode[]>, key: string): void {
     for(const def of Definitions){
@@ -128,7 +165,7 @@ function CreateFunctionCallsAndParametersDiagnostic(
                 if(def){
                     let NumParamsInCall = Function.ExtractNumParamsFromRef(ref.function);
                     let NumParamsInDef = Function.ExtractNumParamsFromDef(def);
-                    if(NumParamsInCall !== NumParamsInDef){
+                    if(NumParamsInCall !== NumParamsInDef && ref.function.parent!.value !== "FormletPlacement"){ // Added formlet placement for { f => g}
                         FunctionCallsAndParametersDiagnostic.push(
                             {
                                 node: ref.function,
@@ -208,7 +245,113 @@ function ProcessDiagnosticInfo(Diagnostics: DiagnosticInfo[], extraInfo: boolean
     return ProcessedDiagnostics;
 }
 
-export function Diagnostics(
+
+async function ExecuteLinksCode(
+    linksCode: string, 
+    linksExecutablePath: string = "links"
+): Promise<{success: boolean, errorMessage: string}> {
+    console.log(`[ExecuteLinksCode] Starting here`)
+    try {
+        // Create a temporary file to store the code
+        const tempDir = os.tmpdir();
+        const tempFilePath = path.join(tempDir, `links_temp_${Date.now()}.links`);
+        
+        // Write the code to the temporary file
+        await new Promise((resolve, reject) => {
+            fs.writeFile(tempFilePath, linksCode, (err) => {
+                if (err) {reject(err);}
+                console.log(`in call back`);
+                resolve(null);
+            });
+        });
+        
+        // Execute the code using links
+        try {
+            console.log(`temp file path${tempFilePath}`);
+            const fileContent = fs.readFileSync(tempFilePath, 'utf8');
+            console.log('File content verification:');
+            console.log(fileContent);
+            const output = childProcess.execSync(`linx ${tempFilePath}`, {
+                timeout: 2000, // 2 second timeout
+                stdio: 'pipe'  // Capture output
+            });
+            console.log(`after execution!`);
+            const output_str = output.toString();
+            console.log(`output_str: ${output_str}`);
+            if(output_str.includes("In expression")) {
+                return {success: false, errorMessage: `No error`};
+            } else {
+                return {success: false, errorMessage: `No error`};
+            }
+        } catch (execError: any) {
+            const t = execError.message.split(" ");
+            let tt = t.slice(4, -1).join(" ");
+
+            return { success: true, errorMessage: tt};
+        } finally {
+            // Clean up temporary file
+            fs.unlink(tempFilePath, (err) => {
+                console.log("inside callback");
+            });
+        }
+    } catch (error: any) {
+        console.log(`failed: ${error}`);
+        return { success: false, errorMessage: `Failed to execute code: ${error.message}` };
+    }
+}
+
+function ExtractPositionOfRunTimeError(errorMsg: string, textDocument:string): Range | null{
+    if(!errorMsg){
+        return null;
+    }
+    let by_line = errorMsg.split("\n");
+    let idx = by_line.length-1;
+    while(idx !== 0){
+        let curr_line = by_line[idx];
+        if(curr_line.includes("In expression")){
+            break;
+        }
+        idx -= 1;
+    }
+
+    let t = by_line[idx].split(" ").slice(2, -1);
+    console.log(`[t] Extract pos of run time error: ${t}`);
+    console.log(`[byline] ${by_line[idx]}`);
+    let tt = by_line[idx].substring(15, by_line[idx].length-1);
+    console.log(`[tt]: ${tt}`);
+    const escapedString = tt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    let pat = new RegExp(escapedString, 'g');
+
+    let ttt = extractRegexPositionFromFullDoc(textDocument, tt);
+    console.log(`[ttt]: ${JSON.stringify(ttt, null, 2)}`);
+    return ttt;
+
+}
+
+
+async function getRuntimeDiagnostics(documentText: string): Promise<Diagnostic | null>{
+    let result = await ExecuteLinksCode(documentText);
+
+
+    if(result.success){
+        let posOfError = ExtractPositionOfRunTimeError(result.errorMessage, documentText);
+        if(!posOfError){
+            return null;
+        }
+        console.log(`should behere!`);
+        return {
+            severity: DiagnosticSeverity.Error,
+            range: posOfError,
+            message: `Runtime error: ${result.errorMessage}`,
+            source: 'LinksLSP-Runtime'
+        };
+    } else {
+        return null;
+    }
+}
+
+export async function Diagnostics(
     extraInfo: boolean,
     uri: string,
     functionReferences: Map<string, FunctionNode[]>,
@@ -216,26 +359,26 @@ export function Diagnostics(
     functionRefToDef: Map<AST.ASTNode, AST.ASTNode>,
     variableRefToDef: Map<AST.ASTNode, AST.ASTNode>,
     variableReferences:Map<string, VariableNode[]>,
-    variableDefinition: Map<string, VariableNodeDef[]>
-
-
-
-): Diagnostic[]{
+    variableDefinition: Map<string, VariableNodeDef[]>,
+    documentText: string
+): Promise<Diagnostic[]>{
     let Diagnostics: DiagnosticInfo[] = [];
-    let UndefinedVariableDiagnostic = CreateUndefinedVariableDiagnostics(variableReferences, variableRefToDef);
+    let UndefinedVariableDiagnostic = CreateUndefinedVariableDiagnostics(variableReferences, variableRefToDef, functionDefinitions);
     let MultipleVariableDefinitionsDiagnostic = CreateMultipleVariableDefinitionsDiagnostic(variableDefinition);
     let UndefinedFunctionDiagnostic = CreateUndefinedFunctionDiagnostic(functionReferences, functionRefToDef, functionDefinitions);
     let FunctionCallsAndParametersDiagnostic = CreateFunctionCallsAndParametersDiagnostic(functionReferences, functionRefToDef);
-    
+    let RuntimeDiagnostics = await getRuntimeDiagnostics(documentText);
     Diagnostics = [
         ...UndefinedVariableDiagnostic, 
         ...MultipleVariableDefinitionsDiagnostic, 
         ...UndefinedFunctionDiagnostic, 
-        ...FunctionCallsAndParametersDiagnostic, 
+        ...FunctionCallsAndParametersDiagnostic,
     ];
 
     const RangeAdjustedDiagnostics = AdjustDiagnosticInfoRanges(Diagnostics);
     let ProcessedDiagnostics: Diagnostic[] = ProcessDiagnosticInfo(RangeAdjustedDiagnostics, extraInfo, uri);
-
+    if(RuntimeDiagnostics){
+        ProcessedDiagnostics = [...ProcessedDiagnostics, RuntimeDiagnostics];
+    }
     return ProcessedDiagnostics;
 }

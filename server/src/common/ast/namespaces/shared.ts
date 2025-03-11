@@ -278,18 +278,38 @@ function ExtractFunctionsByUsage(
                 if(refs){
                     for(const ref of refs){
                         let funPos = ref.function.range;
-
                         if(!used){
-                            if(!AST.isInRange(funPos, scopeOfVarDef)){
+                            // Only mark as unused if ALL references are outside scope
+                            let allRefsOutsideScope = true;
+                            for(const ref of refs){
+                                if(AST.isInRange(ref.function.range, scopeOfVarDef)){
+                                    allRefsOutsideScope = false;
+                                    break;
+                                }
+                            }
+                            if(allRefsOutsideScope){
                                 functions.push(def.functionDefinition);
-                                break;
                             }
                         } else {
-                            if(AST.isInRange(funPos, scopeOfVarDef)){
-                                functions.push(def.functionDefinition);
-                                break;
+                            // Only mark as used if ANY reference is inside scope (current behavior)
+                            for(const ref of refs){
+                                if(AST.isInRange(ref.function.range, scopeOfVarDef)){
+                                    functions.push(def.functionDefinition);
+                                    break;
+                                }
                             }
                         }
+                        // if(!used){
+                        //     if(!AST.isInRange(funPos, scopeOfVarDef)){
+                        //         functions.push(def.functionDefinition);
+                        //         break;
+                        //     }
+                        // } else {
+                        //     if(AST.isInRange(funPos, scopeOfVarDef)){
+                        //         functions.push(def.functionDefinition);
+                        //         break;
+                        //     }
+                        // }
                     }
                 } else if (!refs && used === false && Function.getNameFromFun(def.functionDefinition) !== "dummy_wrapper") {
                     functions.push(def.functionDefinition);

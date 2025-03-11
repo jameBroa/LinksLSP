@@ -48,6 +48,13 @@ Calling out known issues can help limit users opening duplicate issues against y
 
 ## Release Notes
 
+### 11/03/25
+- Added new features
+    - Document symbols support
+    - Errors produced on runtime 
+
+
+
 ### 04/03/25
 - Bug fixes
 - Now runs without manually starting <a href="https://github.com/jameBroa/LinksParser">LinksParser</a>
