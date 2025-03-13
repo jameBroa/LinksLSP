@@ -98,10 +98,10 @@ export function ParseSemanticTokens(
         xml_text
     );
 
-    console.log(`[semanticTokens] all_tokens: ${JSON.stringify(all_tokens, AST.removeParentAndChildren, 2)}`);
+    // console.log(`[semanticTokens] all_tokens: ${JSON.stringify(all_tokens, AST.removeParentAndChildren, 2)}`);
 
     if(range){
-        console.log(`[semanticTokens] Filtering by range: ${JSON.stringify(range, null, 2)}`);
+        // console.log(`[semanticTokens] Filtering by range: ${JSON.stringify(range, null, 2)}`);
         all_tokens = all_tokens.filter(({node}) => AST.isInRange(range, node.range));
     }
 

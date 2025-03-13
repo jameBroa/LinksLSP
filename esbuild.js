@@ -1,7 +1,36 @@
 const esbuild = require("esbuild");
-
+const fs = require('fs');
+const path = require('path');
+// Directories to exclude from copying
+const EXCLUDED_DIRS = ['.git', 'node_modules', '_build'];
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
+
+function copyRecursive(src, dest) {
+	if (!fs.existsSync(dest)) {
+	  fs.mkdirSync(dest, { recursive: true });
+	}
+	
+	const files = fs.readdirSync(src);
+	
+	for (const file of files) {
+		if (EXCLUDED_DIRS.includes(file)) {
+			console.log(`Skipping excluded directory: ${file}`);
+			continue;
+		  }
+	  const srcPath = path.join(src, file);
+	  const destPath = path.join(dest, file);
+	  
+	  const stats = fs.statSync(srcPath);
+	  
+	  if (stats.isDirectory()) {
+		copyRecursive(srcPath, destPath);
+	  } else {
+		fs.copyFileSync(srcPath, destPath);
+	  }
+	}
+}
+
 
 /**
  * @type {import('esbuild').Plugin}
@@ -49,6 +78,9 @@ async function main() {
 		await ctx.rebuild();
 		await ctx.dispose();
 	}
+	const sourceDir = path.join(__dirname,  'parser-pipline');
+	const serverOutDir = path.join(__dirname, 'dist');
+	copyRecursive(sourceDir, path.join(serverOutDir, 'parser-pipline'));
 }
 
 main().catch(e => {

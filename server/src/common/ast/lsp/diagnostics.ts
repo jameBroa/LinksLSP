@@ -250,7 +250,6 @@ async function ExecuteLinksCode(
     linksCode: string, 
     linksExecutablePath: string = "links"
 ): Promise<{success: boolean, errorMessage: string}> {
-    console.log(`[ExecuteLinksCode] Starting here`)
     try {
         // Create a temporary file to store the code
         const tempDir = os.tmpdir();
@@ -260,24 +259,17 @@ async function ExecuteLinksCode(
         await new Promise((resolve, reject) => {
             fs.writeFile(tempFilePath, linksCode, (err) => {
                 if (err) {reject(err);}
-                console.log(`in call back`);
                 resolve(null);
             });
         });
         
         // Execute the code using links
         try {
-            console.log(`temp file path${tempFilePath}`);
-            const fileContent = fs.readFileSync(tempFilePath, 'utf8');
-            console.log('File content verification:');
-            console.log(fileContent);
             const output = childProcess.execSync(`linx ${tempFilePath}`, {
                 timeout: 2000, // 2 second timeout
                 stdio: 'pipe'  // Capture output
             });
-            console.log(`after execution!`);
             const output_str = output.toString();
-            console.log(`output_str: ${output_str}`);
             if(output_str.includes("In expression")) {
                 return {success: false, errorMessage: `No error`};
             } else {
@@ -315,16 +307,8 @@ function ExtractPositionOfRunTimeError(errorMsg: string, textDocument:string): R
     }
 
     let t = by_line[idx].split(" ").slice(2, -1);
-    console.log(`[t] Extract pos of run time error: ${t}`);
-    console.log(`[byline] ${by_line[idx]}`);
     let tt = by_line[idx].substring(15, by_line[idx].length-1);
-    console.log(`[tt]: ${tt}`);
-    const escapedString = tt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    let pat = new RegExp(escapedString, 'g');
-
     let ttt = extractRegexPositionFromFullDoc(textDocument, tt);
-    console.log(`[ttt]: ${JSON.stringify(ttt, null, 2)}`);
     return ttt;
 
 }
@@ -336,10 +320,9 @@ async function getRuntimeDiagnostics(documentText: string): Promise<Diagnostic |
 
     if(result.success){
         let posOfError = ExtractPositionOfRunTimeError(result.errorMessage, documentText);
-        if(!posOfError){
+        if(!posOfError || result.errorMessage.includes("Unknown variable")){
             return null;
         }
-        console.log(`should behere!`);
         return {
             severity: DiagnosticSeverity.Error,
             range: posOfError,

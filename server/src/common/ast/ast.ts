@@ -2728,8 +2728,6 @@ export namespace AST {
     }
 
     export function extractRegexPositionFromFullDoc(documentText: string, targetString: string): Range | null{
-        console.log(`[starting extraction]....`);
-        console.log(`looking for: "${targetString}"`)
         const documentByLine = documentText.split("\n");
         const startLine = 0;
         const endLine = documentByLine.length;

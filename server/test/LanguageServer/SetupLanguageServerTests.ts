@@ -6,7 +6,7 @@ import sinon from 'sinon';
 
 export function setupLanguageServerTests(baseDir: string){
     const server = new LanguageServer();
-    const testOcamlClient = new OCamlClient();
+    const testOcamlClient = new OCamlClient("");
     server.start();
     const tempFilePath = path.join(baseDir, 'temporary.links');
     return { server, testOcamlClient, tempFilePath };

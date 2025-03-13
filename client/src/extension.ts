@@ -49,7 +49,9 @@ export function activate(context: ExtensionContext) {
 	  ], []);
 
 	const config = vscode.workspace.getConfiguration('links');
-	const serverPath = config.get<string>('ocamlServerPath');
+	// const serverPath = config.get<string>('ocamlServerPath');
+	const serverPath = "../../parser-pipeline/parser/parser.exe";
+	
 	// client.sendNotification('custom/updateServerPath', serverPath);
 
 

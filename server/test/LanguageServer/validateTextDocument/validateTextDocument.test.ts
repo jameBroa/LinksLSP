@@ -18,7 +18,7 @@ describe("validateTextDocument: Undefined variable tests", ()=> {
   let tempFilePath: string;
   beforeEach(async ()  => {
       server = new LanguageServer();
-      testOcamlClient = new OCamlClient();
+      testOcamlClient = new OCamlClient("");
       server.start();
       tempFilePath = path.join(__dirname, 'temporary.links');
 
@@ -231,7 +231,7 @@ describe("validateTextDocument: Multiple variable definitions tests", ()=> {
   let tempFilePath: string;
   beforeEach(async ()  => {
     server = new LanguageServer();
-    testOcamlClient = new OCamlClient();
+    testOcamlClient = new OCamlClient("");
     server.start();
     tempFilePath = path.join(__dirname, 'temporary.links');
 
@@ -313,7 +313,7 @@ describe("validateTextDocument: Undefined functions tests", ()=> {
   let tempFilePath: string;
   beforeEach(async ()  => {
     server = new LanguageServer();
-    testOcamlClient = new OCamlClient();
+    testOcamlClient = new OCamlClient("");
     server.start();
     tempFilePath = path.join(__dirname, 'temporary.links');
   });
@@ -489,7 +489,7 @@ describe("validateTextDocument: Function calls and parameters tests", () => {
   let tempFilePath: string;
   beforeEach(async ()  => {
     server = new LanguageServer();
-    testOcamlClient = new OCamlClient();
+    testOcamlClient = new OCamlClient("");
     server.start();
     tempFilePath = path.join(__dirname, 'temporary.links');
 

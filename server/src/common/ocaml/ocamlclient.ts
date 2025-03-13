@@ -117,6 +117,7 @@ export class OCamlClient{
         if(this.IsServerPathInit){
             // Do other checks like validate files/directories?
             this.ocamlServerPath = serverPath;
+            console.log(`update server path: ${this.ocamlServerPath}`);
             return await this.Start_OCamlServer();
         } else {
             return false;
@@ -168,8 +169,8 @@ export class OCamlClient{
             // const dirContents = await fs.readdir(parentDir);
             // console.log(`[OCamlClient] Directory contents: ${dirContents}`);
 
-            // const stats = await fs.stat(this.ocamlServerPath);
-            // console.log(`[OCamlClient] File exists: ${stats.isFile()}`);
+            const stats = await fs.stat(this.ocamlServerPath);
+            console.log(`[OCamlClient] File exists: ${stats.isFile()}`);
 
 
 

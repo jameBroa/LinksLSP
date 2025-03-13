@@ -1,8 +1,14 @@
 {
   "name": "links",
+  "publisher": "james-broadhurst",
+  "repository": {
+    "type":"git",
+    "url":"https://github.com/jameBroa/LinksLSP"
+  },
+  "license":"MIT",
   "displayName": "links-lang-lsp",
   "description": "LSP for the Links programming language",
-  "version": "0.0.1",
+  "version": "1.1.0",
   "engines": {
     "vscode": "^1.94.0"
   },
@@ -230,7 +236,7 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint server/src && eslint client/src",
     "test": "vscode-test"
-  },
+ },
   "devDependencies": {
     "@types/mocha": "^10.0.8",
     "@types/node": "20.x",
