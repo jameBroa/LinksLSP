@@ -78,7 +78,7 @@ async function main() {
 		await ctx.rebuild();
 		await ctx.dispose();
 	}
-	const sourceDir = path.join(__dirname,  'parser-pipline');
+	const sourceDir = path.join(__dirname,  'LinksParser');
 	const serverOutDir = path.join(__dirname, 'dist');
 	copyRecursive(sourceDir, path.join(serverOutDir, 'parser-pipline'));
 }
