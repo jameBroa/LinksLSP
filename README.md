@@ -2,6 +2,14 @@
 
 This repo contains an implementation of a VSCODE Extension for the programming langauge Links. The original aim of this project was to implement a Language Server Protocol for the language, however, the project has evolved to include extra features to enhance the development experience. This project is made as part of my final year dissertation project at The University of Edinburgh.
 
+## Installing for Use
+Unfortunately, the `VSIX' file is too large to upload to Github. To install and run locally please do the following:
+1) Clone the repo
+2) Install VSCE with `npm install -g @vscode/vsce`
+3) Navigate to clone repo and run `vsce package'
+This will produce a `.VSIX' file which you can install via VSCode extension section
+
+
 ## NOTE
 To get the token highlighting working, once installed, please change the theme from your theme to `Links Dark'. This is a custom theme specifically setup for Links.
 
