@@ -32,7 +32,7 @@ describe("SemanticTokens: Database tests", () => {
 
     it("Should semantically highlight iterator variables inside query expressions as 'used'", async () => {
         const result = await RunSemanticTest(baseUri, tempFilePath, server, testOcamlClient, '1.links');
-        const expected = [1,4,2,8,0,0,14,7,19,0,2,4,8,8,0,0,17,10,19,0,0,68,2,8,0,2,4,16,9,0,0,36,8,8,0,0,11,1,9,0];
+        const expected = [1,4,2,8,0,0,14,7,19,0,2,4,8,8,0,0,17,10,19,0,0,68,2,8,0,2,4,16,9,0,0,30,1,8,0,0,6,8,8,0,0,11,1,8,0];
         assert.deepStrictEqual(result, expected);        
     });
 

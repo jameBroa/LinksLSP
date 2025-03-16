@@ -1,0 +1,13 @@
+
+
+fun firstScope(){
+    var x = 10;
+    x
+}
+
+fun secondScope(){
+    var x = 5;
+    x
+}
+
+firstScope()

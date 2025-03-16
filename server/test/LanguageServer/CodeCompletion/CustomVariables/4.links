@@ -1,0 +1,7 @@
+fun foo(){
+    var exampleVar = 12;
+    var exampleVarTwo = 14;
+    exampl
+}
+
+foo()

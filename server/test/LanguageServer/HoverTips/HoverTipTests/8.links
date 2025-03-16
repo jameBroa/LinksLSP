@@ -1,0 +1,25 @@
+
+fun createString(input){
+    stringToXml(input)
+}
+
+fun eg(){
+    page
+        <html> 
+            {
+                fun test(){
+                    <div>
+                        {
+                            fun inner(){
+                                <p>{createString("input")}</p>
+                            }
+                            inner()
+                        }
+                    </div>
+                }
+                test()
+            }
+        </html>
+}
+
+eg()

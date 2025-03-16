@@ -1,0 +1,10 @@
+
+fun eg_page(){
+    var eg_var = "test";
+    page
+    <html> 
+        <body> <p> {eg_var}</p></body>
+    </html>
+}
+
+eg_page()

@@ -4,6 +4,7 @@ import { FunctionNode, FunctionNodeDef } from "../node";
 import { Variable } from "../namespaces/variable";
 import { Function } from "../namespaces/function";
 import { LinksParserConstants } from "../../constants";
+import { RangeReplacer } from "../namespaces/range";
 
 export function Hover(
     HoverNode: AST.ASTNode, 
@@ -29,7 +30,7 @@ export function Hover(
                     };
                     return {
                         contents: content,
-                        range: HoverNode.range
+                        range: RangeReplacer.AdjustRangeAsRange(HoverNode.range)
                     };
                 }
             }
@@ -52,7 +53,7 @@ export function Hover(
                         };
                         return {
                             contents: content,
-                            range: HoverNode.range
+                            range: RangeReplacer.AdjustRangeAsRange(HoverNode.range)
                         };
 
                     } 

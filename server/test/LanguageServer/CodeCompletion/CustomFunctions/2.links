@@ -1,0 +1,9 @@
+fun customFunction(x){
+    x
+}
+
+fun foo(input_list){
+    for(x <- input_list) [cust]
+}
+
+foo([1,2,3])

@@ -56,15 +56,17 @@ export class OCamlClient{
       }
 
     public async get_AST_as_JSON(code: string): Promise<string> {
-        const client = await this.connect();
+        console.log(`[OCamlClient] Getting AST as JSON for code: ${code}`);
+        const client = await this.connect();    
         let full_data = "";
         return new Promise((resolve, reject) => {
             client.write(code, (err) => {
+                console.log(`"${code}"`)
                 if(err) {
                     return reject(err);
                 }
                 console.log("[OCamlClient] in write callback!");
-                client.end();
+                // client.end();
             });
 
             client.on('data', (data) => {
@@ -214,7 +216,7 @@ export class OCamlClient{
 
             console.log(`[OCamlClient] Started server process with PID ${this.serverProcess.pid}`);
 
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            // await new Promise(resolve => setTimeout(resolve, 3000));
             return true;
 
         } catch (e){

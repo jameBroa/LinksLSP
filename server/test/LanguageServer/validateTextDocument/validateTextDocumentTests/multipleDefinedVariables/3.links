@@ -1,0 +1,18 @@
+
+
+fun eg_page(){
+    page 
+    <html> 
+        <body> 
+            <p>
+            {
+                var dup = 10;
+                var dup = 20;
+                intToXml(dup)
+            }
+            </p>
+        </body>
+    </html>
+}
+
+eg_page()

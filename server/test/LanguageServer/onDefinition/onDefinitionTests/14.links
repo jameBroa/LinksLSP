@@ -1,0 +1,14 @@
+
+
+fun test(){
+  <div> 
+    {
+      fun another(names, ages){
+        for ((name, age) <- zip(names, ages)) [(name, age)]
+      }
+      <p>Hello</p>
+    }
+  </div>
+}
+
+test() 

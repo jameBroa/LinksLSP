@@ -1,0 +1,20 @@
+fun example(){
+  "example-id"
+}
+
+page
+  <html> 
+    <body> 
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    <p id="{example()}"></p>
+    </body>
+  </html>

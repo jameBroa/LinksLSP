@@ -110,6 +110,20 @@ export namespace Variable {
             return false;
         }
 
+        export function isIterationTuple(node: AST.ASTNode): boolean{
+            if(
+                node.parent &&
+                node.parent.parent &&
+                node.parent.parent.parent &&
+                node.parent.value === "Tuple" &&
+                node.parent.parent.value === "List" &&
+                node.parent.parent.parent.value === "Iteration"
+            ) {
+                return true;
+            }
+            return false;
+        }
+
         export function isDatabase(node: AST.ASTNode): boolean {
             if (
                 node.type === "Leaf" &&
@@ -189,6 +203,7 @@ export namespace Variable {
                 || isInCaseForTuple(node)
                 || isLName(node)
                 || isSwitchListDestructering(node)
+                || isIterationTuple(node)
             );
            
         }
@@ -330,7 +345,19 @@ export namespace Variable {
 
     function getScopeOfCase(node: AST.ASTNode): AST.ASTNode {
         let caseNode = node.parent!.parent!;
-        return caseNode.children![1];
+        let block = caseNode.children![1];
+        let newScope = {
+            type: block.type,
+            value: block.value,
+            range: {
+                start: caseNode.range.start,
+                end: block.range.end
+            },
+            children: block.children,
+            parent: block.parent
+        } as AST.ASTNode;
+        return newScope;
+        // return caseNode.children![1];
     }
 
     function getScopeOfCaseDestructing(node: AST.ASTNode, currentScope: AST.ASTNode): AST.ASTNode {
@@ -385,6 +412,11 @@ export namespace Variable {
                     varName = getName(currentNode);
                     scopeNode = getScopeOfCaseDestructing(currentNode, currentNode);
 
+                }else if (VariableConditions.isIterationTuple(currentNode)){
+                    scopeNode = getScopeOfIteration(currentNode.parent!);
+                    varName = getName(currentNode);
+
+
                 }else {
                     scopeNode = getScopeOfDef(currentNode, currentNode);
                 }
@@ -416,6 +448,7 @@ export namespace Variable {
             let scopeNode;
             if(VariableConditions.isVariableReference(currentNode)){
                 varName = getName(currentNode);
+                
                 scopeNode = getScope(currentNode, currentNode);
 
                 if(scopeNode !== currentNode){

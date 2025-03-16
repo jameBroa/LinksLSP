@@ -1,0 +1,10 @@
+
+fun calculate(num){
+    num*2
+}
+
+fun temp(input){
+    for (x <- input) [calculate(x)]
+}
+
+temp([1,2,3,4])

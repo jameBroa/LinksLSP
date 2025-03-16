@@ -18,7 +18,7 @@ export async function RunOnDefinitionTest(
     const fileContent = await fs.readFile(fileUri, 'utf8');
     let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
     await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
-    
+    console.log(`temp file path: ${tempFilePath}`);
     sinon.stub(server, 'getAST').returns(
         Promise.resolve((
             AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")

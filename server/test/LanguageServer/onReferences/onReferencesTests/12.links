@@ -1,0 +1,19 @@
+fun example(){
+  intToXml(5)
+}
+
+
+page
+  <html> 
+    <body> 
+    <p> {example()}</p>
+    <p> {example()}</p>
+    <p> {example()}</p>
+    <p> {example()}</p>
+    <p> {example()}</p>
+    <p> {example()}</p>
+    <p> {example()}</p>
+    <p> {example()}</p>
+    <p> {example()}</p>
+    </body>
+  </html>

@@ -1,0 +1,8 @@
+
+var x = 10;
+fun test() {
+  var x = 20; #Shadows outer x
+  x
+}
+test()
+

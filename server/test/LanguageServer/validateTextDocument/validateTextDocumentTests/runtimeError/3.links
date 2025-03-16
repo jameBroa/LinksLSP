@@ -1,0 +1,7 @@
+
+fun main(){
+    var x = 10;
+    hd(x)
+}
+
+main()

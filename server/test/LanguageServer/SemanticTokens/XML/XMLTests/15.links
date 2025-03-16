@@ -1,0 +1,20 @@
+
+fun eg_page(){
+    page 
+        <html> 
+            <body> 
+                <div id="{
+                    var name = "John";
+                    var age = 34;
+                    var height = 175;
+                    fun produceId(name, age, height){
+                        [name, floatToString(intToFloat(age)), floatToString(intToFloat(height))]
+                    }
+                    hd(tl(produceId(name, age, height)))
+                }">
+                </div>
+            </body>
+        </html>
+}
+
+eg_page()

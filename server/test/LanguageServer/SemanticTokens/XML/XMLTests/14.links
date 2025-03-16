@@ -1,0 +1,23 @@
+
+fun eg_page(){
+    page 
+        <html> 
+            <body> 
+            {
+                var height = 175;
+                var name = "John";
+                var age = 34;
+                fun produceComponent(height, name, age){
+                    <div> 
+                        <p>Height: {intToXml(height)}</p>
+                        <p>Name: {stringToXml(name)}</p>
+                        <p>Age: {intToXml(age)}</p>
+                    </div>
+                }
+                produceComponent(height, name, age)
+            }
+            </body>
+        </html>
+}
+
+eg_page()

@@ -1,0 +1,17 @@
+
+mutual{
+    fun a(){
+        1
+    }
+    fun b(){
+        a()
+    }
+    fun c(){
+        a()
+    }
+    fun d(){
+        a()
+    }
+}
+
+()

@@ -1,0 +1,18 @@
+
+fun calculate(n){
+    <p>{stringToXml(n)}</p>
+}
+
+fun eg_page(){
+    page 
+    <html> 
+        <body> 
+            <form l:onsubmit="{calculate(undefined)}"> 
+                <input l:name="defined"/>
+            </form>
+        
+        </body>
+    </html>
+}
+
+eg_page()

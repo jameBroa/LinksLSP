@@ -13,6 +13,46 @@ function GetValidVarReferences(
     uri: string): void {
     for(const ref of VarRefs){
         for(const def of VarDefs){
+            // console.log(`node.range: ${JSON.stringify(node.range)}`);
+            // console.log(`def.scope.range: ${JSON.stringify(def.scope.range)}`);
+            // console.log(`ref.variable.range: ${JSON.stringify(ref.variable.range)}`);
+            /**
+             * variableDefinition": {
+      "type": "Leaf",
+      "value": "Variable: def",
+      "range": {
+        "start": {
+          "line": 108,
+          "character": 22
+        },
+        "end": {
+          "line": 108,
+          "character": 25
+        }
+      }
+    },
+    "scope": {
+      "type": "Node",
+      "value": "Block",
+      "range": {
+        "start": {
+          "line": 109,
+          "character": 12
+        },
+        "end": {
+          "line": 111,
+          "character": 56
+        }
+      }
+    }
+  }
+]
+             * 
+             * 
+             * 
+             * 
+             */
+            console.log("\n\n");
             console.log(`node.range: ${JSON.stringify(node.range)}`);
             console.log(`def.scope.range: ${JSON.stringify(def.scope.range)}`);
             console.log(`ref.variable.range: ${JSON.stringify(ref.variable.range)}`);
@@ -21,6 +61,7 @@ function GetValidVarReferences(
                 AST.isInRange(node.range, def.scope.range) &&
                 AST.isInRange(ref.variable.range, def.scope.range)
             ){
+                console.log(`adding var!`);
                 References.push(Location.create(
                     uri,
                     ref.variable.range
@@ -63,15 +104,15 @@ export function References(
     functionReferences: Map<string, FunctionNode[]>
 ): Location[] {
     let References: Location[] = [];
-    // console.log(`[References] node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
+    console.log(`[References] node: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
     if(IsOnDefinitionVariable(node)){
+        console.log(`variable reference`)
         let varName = Variable.getName(node);
-
-        // console.log(`getting references for ${varName}`);
-
-
         let VariableDefinitions = variableDefinitions.get(varName);
         let VariableReferences = variableReferences.get(varName);
+
+        console.log(`VariableDefinitions: ${JSON.stringify(VariableDefinitions, AST.removeParentAndChildren, 2)}`);
+        console.log(`VariableReferences: ${JSON.stringify(VariableReferences, AST.removeParentAndChildren, 2)}`);
 
         if(VariableReferences && VariableDefinitions){
             GetValidVarReferences(node, VariableReferences, VariableDefinitions, References, uri);
@@ -81,6 +122,21 @@ export function References(
             uri,
             node.range
         ));
+    } else if (node.value === "Fun") {
+
+        let funName = Function.getNameFromFun(node);
+        let FunctionDefinitions = functionDefinitions.get(funName);
+        let FunctionReferences = functionReferences.get(funName);
+
+        if(FunctionReferences && FunctionDefinitions){
+            GetValidFunReferences(node, FunctionReferences, FunctionDefinitions, References, uri);
+        }
+
+        References.push(Location.create(
+            uri,
+            node.range
+        ));
+
     } else {
         let funName = Function.getNameFromFun(node.parent!);
         let FunctionDefinitions = functionDefinitions.get(funName);

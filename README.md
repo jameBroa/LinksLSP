@@ -47,6 +47,13 @@ This will produce a `.VSIX' file which you can install via VSCode extension sect
 
 ## Release Notes
 
+### 16/03/25
+One of the last updates made. Probably won't add more updates unless necessary after this one.
+- Added ALL unit tests over all features
+- Fixed bugs
+    - Document symbols nested variables/functions
+    - Function definition/reference on variables defined in Variants
+
 ### 13/03/25
 - Added .vsix file
 - Added submodule LinksParser responsible for AST generation

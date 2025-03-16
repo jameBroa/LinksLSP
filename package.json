@@ -8,7 +8,7 @@
   "license":"MIT",
   "displayName": "links-lang-lsp",
   "description": "LSP for the Links programming language",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "engines": {
     "vscode": "^1.94.0"
   },
@@ -202,6 +202,18 @@
         }
       }
     ],
+    "configurationDefaults": {
+      "[links]": {
+        "editor.semanticTokenColorCustomizations": {
+          "rules": {
+            "variable": "#9cdcfe",
+            "variable.unused": "#739DB3",
+            "function": "#DCDCAA",
+            "function.call": "#DCDCAA"
+          }
+        }
+      }
+    },
     "colors": [
       {
         "id":"variable.used.links",
@@ -219,6 +231,159 @@
           "dark":"#739DB3",
           "light":"#739DB3",
           "highContrast":"#739DB3"
+        }
+      },
+      {
+        "id":"usedFunction.links",
+        "description":"Color for Links functions",
+        "defaults":{
+          "dark":"#DCDCAA",
+          "light":"#DCDCAA",
+          "highContrast":"#DCDCAA"
+        }
+      },
+      {
+        "id":"functionCall.links",
+        "description":"Color for Links function calls",
+        "defaults":{
+          "dark":"#DCDCAA",
+          "light":"#DCDCAA",
+          "highContrast":"#DCDCAA"
+        }
+      },
+      {
+        "id":"keyword.control.links",
+        "description":"Color for Links keywords",
+        "defaults":{
+          "dark":"#569CD6",
+          "light":"#569CD6",
+          "highContrast":"#569CD6"
+        }
+      },
+      {
+        "id":"support.type.links",
+        "description":"Color for Links support types",
+        "defaults":{
+          "dark":"#4EC9B0",
+          "light":"#4EC9B0",
+          "highContrast":"#4EC9B0"
+        }
+      },
+      {
+        "id":"comment.line.pound.links",
+        "description":"Color for Links comments",
+        "defaults":{
+          "dark":"#6A9955",
+          "light":"#6A9955",
+          "highContrast":"#6A9955"
+        }
+      },
+      {
+        "id":"statement.end.links",
+        "description":"Color for Links statement ends",
+        "defaults":{
+          "dark":"#D4D4D4",
+          "light":"#D4D4D4",
+          "highContrast":"#D4D4D4"
+        }
+      },
+      {
+        "id":"string.quoted.double.links",
+        "description":"Color for Links strings",
+        "defaults":{
+          "dark":"#CE9178",
+          "light":"#6A9955",
+          "highContrast":"#CE9178"
+        }
+      },
+      {
+        "id":"number.links",
+        "description":"Color for Links numbers",
+        "defaults":{
+          "dark":"#B5CEA8",
+          "light":"#B5CEA8",
+          "highContrast":"#B5CEA8"
+        }
+      },
+      {
+        "id":"xmlAttribute.links",
+        "description":"Color for Links XML attributes",
+        "defaults":{
+          "dark":"#569CD6",
+          "light":"#569CD6",
+          "highContrast":"#569CD6"
+        }
+      },
+      {
+        "id":"xml.links",
+        "description":"Color for Links XML",
+        "defaults":{
+          "dark":"#BA6D6C",
+          "light":"#BA6D6C",
+          "highContrast":"#BA6D6C"
+        }
+      },
+      {
+        "id":"xmlTag.links",
+        "description":"Color for Links XML tags",
+        "defaults":{
+          "dark":"#808080",
+          "light":"#808080",
+          "highContrast":"#808080"
+        }
+      },
+      {
+        "id":"keyword.xml.defaults.links",
+        "description":"Color for Links XML keywords",
+        "defaults":{
+          "dark":"#569CD6",
+          "light":"#569CD6",
+          "highContrast":"#569CD6"
+        }
+      },
+      {
+        "id":"string.links",
+        "description":"Color for Links strings",
+        "defaults":{
+          "dark":"#CE9178",
+          "light":"#CE9178",
+          "highContrast":"#CE9178"
+        }
+      },
+      {
+        "id":"projections.links",
+        "description":"Color for Links projections",
+        "defaults":{
+          "dark":"#61AFEF",
+          "light":"#61AFEF",
+          "highContrast":"#61AFEF"
+        }
+      },
+      {
+        "id":"unusedFunction.links",
+        "description":"Color for Links unused functions",
+        "defaults":{
+          "dark":"#9a9e82",
+          "light":"#9a9e82",
+          "highContrast":"#9a9e82"
+        }
+      },
+      {
+        "id":"variant.links",
+        "description":"Color for Links variants",
+        "defaults":{
+          "dark":"#67ad66",
+          "light":"#67ad66",
+          "highContrast":"#67ad66"
+        }
+      },
+      {
+        "id":"xmlText.links",
+        "description":"Color for Links XML text",
+        "defaults":{
+          "dark":"#D4D4D4",
+          "light":"#D4D4D4",
+          "highContrast":"#D4D4D4"
         }
       }
     ]

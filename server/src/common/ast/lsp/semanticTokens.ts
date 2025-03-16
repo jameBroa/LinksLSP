@@ -105,7 +105,7 @@ export function ParseSemanticTokens(
         all_tokens = all_tokens.filter(({node}) => AST.isInRange(range, node.range));
     }
 
-
+    console.log(`all_tokens: ${JSON.stringify(all_tokens, AST.removeParentAndChildren, 2)}`);
     let builder = new SemanticTokensBuilder();
     CreateBuilder(all_tokens, builder, documentText);
     return builder.build();

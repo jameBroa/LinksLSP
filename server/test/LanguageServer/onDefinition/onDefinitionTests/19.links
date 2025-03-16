@@ -1,0 +1,25 @@
+
+
+fun a(){
+  fun inner(){
+
+  }
+  inner()
+}
+
+fun b(){
+  fun inner(){
+
+  }
+  inner()
+
+}
+
+fun c(){
+  fun inner(){
+
+  }
+  inner()
+}
+
+a()

@@ -122,13 +122,4 @@ describe("SemanticTokens: Unused function tests", () => {
         const expected = [1,4,3,28,0,1,4,3,28,0,1,8,3,27,0,1,8,3,27,0,1,8,1,20,0,2,4,1,20,0,3,0,3,29,0];
         assert.deepStrictEqual(result, expected);
     });
-
-
-
-
-
-
-
-
-
 });

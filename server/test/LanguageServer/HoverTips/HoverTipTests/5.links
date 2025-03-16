@@ -1,0 +1,2 @@
+
+getAttribute(<div id="lol"> </div>, "id")

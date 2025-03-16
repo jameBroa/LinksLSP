@@ -652,6 +652,7 @@ export namespace AST {
     // Given a position on the VSCode document, return the Node in the AST
     // that corresponds to that position.
     export function findNodeAtPosition(ast: ASTNode, position: Position): ASTNode | null {
+        console.log(`[ast.findNodeAtPosition] ${JSON.stringify(position)}`);
         let foundNode: ASTNode | null = null;
         let maxIter = 1;
         let currIter = 0;
@@ -748,6 +749,126 @@ export namespace AST {
     
     traverse(ast);
     return bestMatch;
+    }
+
+    export function myAttempt(ast: ASTNode, position: Position): ASTNode | null{
+
+        let MIN_START_CHAR_DIFF = Number.MAX_VALUE;
+        let MIN_END_CHAR_DIFF = Number.MAX_VALUE;
+        let bestNode: ASTNode = ast;
+
+
+        function traverse(node: ASTNode){
+
+            if(node.range.start.line === position.line) {
+                let startLine;
+                let endLine;
+                let startChar;
+                let endChar;
+                if(node.value === "Fun"){
+                    console.log(`we inside Fun: ${JSON.stringify(node, removeParentAndChildren, 2)}`);
+                    startLine = node.range.start.line;
+                    endLine = startLine;
+                    startChar = node.range.start.character + 4;
+                    endChar = node.range.start.character + 4 + node.children![0].value.split(" ")[1].length;
+                } else {
+                    startLine = node.range.start.line;
+                    endLine = node.range.end.line;
+                    startChar = node.range.start.character;
+                    endChar = node.range.end.character;
+                }
+
+
+                let startCharDiff = Math.abs(startChar - position.character);
+                let endCharDiff;
+                if(endLine !== startLine){
+                    let numLines = endLine - startLine;
+                    let NodeArea = numLines * 1000 + Math.abs(endChar - position.character);
+                    endCharDiff = NodeArea;
+                } else {
+                    endCharDiff = Math.abs(endChar - position.character);
+                }
+
+                if(startCharDiff < MIN_START_CHAR_DIFF || (startCharDiff === MIN_START_CHAR_DIFF && endCharDiff < MIN_END_CHAR_DIFF)){
+                    MIN_START_CHAR_DIFF = startCharDiff;
+                    MIN_END_CHAR_DIFF = endCharDiff;
+                    bestNode = node;
+                }
+
+                // let NodeArea = Math.abs(node.range.end.line - node.range.start.line);
+
+            }
+
+            if(node.children){
+                for(const child of node.children){
+                    traverse(child);
+                }
+            }
+        }
+        traverse(ast);
+        if(bestNode !== ast) {
+            if (bestNode.value === "Block") {
+                bestNode = bestNode.children![0];
+                // bestNode = bestNode.parent!.parent!.children![bestNode.parent!.parent!.children!.length-1];
+            }
+        }
+
+        return bestNode;
+
+
+
+    }
+
+    export function betterBeBest(ast: ASTNode, position: Position): ASTNode {
+        let bestNode: ASTNode = ast;
+        let smallestArea = Number.MAX_VALUE;
+        let smallestDistance = Number.MAX_VALUE;
+        
+        function traverse(node: ASTNode) {
+            // Check if the position is within this node's range
+            const isWithinNode = 
+                (position.line > node.range.start.line || 
+                 (position.line === node.range.start.line && position.character >= node.range.start.character)) &&
+                (position.line < node.range.end.line || 
+                 (position.line === node.range.end.line && position.character <= node.range.end.character));
+            
+            if (isWithinNode) {
+                // Calculate node area (smaller is more specific)
+                const nodeWidth = node.range.end.character - node.range.start.character;
+                const nodeHeight = node.range.end.line - node.range.start.line;
+                const area = nodeHeight * 1000 + nodeWidth;
+                
+                // Calculate distance to node center
+                const centerLine = (node.range.start.line + node.range.end.line) / 2;
+                const centerChar = (node.range.start.character + node.range.end.character) / 2;
+                const distance = Math.abs(position.line - centerLine) * 1000 + 
+                                 Math.abs(position.character - centerChar);
+                
+                // Update best node if this is better
+                if (area < smallestArea || 
+                    (area === smallestArea && distance < smallestDistance)) {
+                    bestNode = node;
+                    smallestArea = area;
+                    smallestDistance = distance;
+                }
+            }
+            
+            // Recurse through children even if this node doesn't contain the position
+            if (node.children) {
+                for (const child of node.children) {
+                    traverse(child);
+                }
+            }
+        }
+        
+        traverse(ast);
+        
+        // Handle the Block special case from the original code
+        if (bestNode.value === "Block") {
+            bestNode = bestNode.parent!.parent!.children![bestNode.parent!.parent!.children!.length-1];
+        }
+        
+        return bestNode;
     }
 
 

@@ -1,0 +1,14 @@
+
+fun examplePage(input_str){
+    page
+        <html> 
+            <body> 
+                <div> 
+                    <h1>This is a heading!</h1>
+                    <p>{stringToXml(input_str)}</p>
+                </div>
+            </body>
+        </html>
+}
+
+()

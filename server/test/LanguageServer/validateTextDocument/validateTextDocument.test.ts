@@ -56,7 +56,6 @@ describe("validateTextDocument: Undefined variable tests", ()=> {
 
       const result = await server.validateTextDocument(params);
 
-      
       let expected = [
           {
             "severity": 1,
@@ -221,6 +220,147 @@ describe("validateTextDocument: Undefined variable tests", ()=> {
 
       assert.deepStrictEqual(result, expected);
   });
+  it("Should throw an 'undefined variable' diagnostic if we reference a variable within a Switch case defined by a Variant", async () => {
+    const fileUri = path.join(baseUri, '5.links');
+    const fileContent = await fs.readFile(fileUri, 'utf8');
+    let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+    await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+    
+    sinon.stub(server, 'getAST').returns(
+        Promise.resolve((
+            AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+        ))
+    );
+
+    let params = TextDocument.create(
+      fileUri.toString(),
+        "links",
+        1,
+        newDocumentText
+    );
+
+    const result = await server.validateTextDocument(params);
+
+    
+    let expected = [
+      {
+        "severity": 1,
+        "range": {
+          "start": {
+            "line": 9,
+            "character": 20
+          },
+          "end": {
+            "line": 9,
+            "character": 29
+          }
+        },
+        "message": "Variable undefined is not defined",
+        "source": "LinksLSP"
+      },
+      {
+        "severity": 1,
+        "range": {
+          "start": {
+            "line": 9,
+            "character": 43
+          },
+          "end": {
+            "line": 9,
+            "character": 52
+          }
+        },
+        "message": "Variable undefined is not defined",
+        "source": "LinksLSP"
+      }
+    ] as Diagnostic[];
+
+    assert.deepStrictEqual(result, expected);
+  });
+  it("Should throw an 'undefined variable' diagnostic if we reference a non-existent variable within a list deconstruction", async () => {
+    const fileUri = path.join(baseUri, '6.links');
+    const fileContent = await fs.readFile(fileUri, 'utf8');
+    let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+    await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+    
+    sinon.stub(server, 'getAST').returns(
+        Promise.resolve((
+            AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+        ))
+    );
+
+    let params = TextDocument.create(
+      fileUri.toString(),
+        "links",
+        1,
+        newDocumentText
+    );
+
+    const result = await server.validateTextDocument(params);
+
+    
+    let expected = [
+      {
+        "severity": 1,
+        "range": {
+          "start": {
+            "line": 7,
+            "character": 47
+          },
+          "end": {
+            "line": 7,
+            "character": 49
+          }
+        },
+        "message": "Variable xx is not defined",
+        "source": "LinksLSP"
+      }
+    ] as Diagnostic[];
+
+    assert.deepStrictEqual(result, expected);
+  });
+  it("Should throw an 'undefined variable' diagnostic if we reference a non-existent variable within an XML Form node with the \"l:onsubmit\" attribute", async () => {
+    const fileUri = path.join(baseUri, '7.links');
+    const fileContent = await fs.readFile(fileUri, 'utf8');
+    let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+    await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+    
+    sinon.stub(server, 'getAST').returns(
+        Promise.resolve((
+            AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+        ))
+    );
+
+    let params = TextDocument.create(
+      fileUri.toString(),
+        "links",
+        1,
+        newDocumentText
+    );
+
+    const result = await server.validateTextDocument(params);
+
+    
+    let expected = [
+      {
+        "severity": 1,
+        "range": {
+          "start": {
+            "line": 9,
+            "character": 41
+          },
+          "end": {
+            "line": 9,
+            "character": 50
+          }
+        },
+        "message": "Variable undefined is not defined",
+        "source": "LinksLSP"
+      }
+    ] as Diagnostic[];
+
+    assert.deepStrictEqual(result, expected);
+  });
 
 });
 
@@ -271,7 +411,7 @@ describe("validateTextDocument: Multiple variable definitions tests", ()=> {
 
       let expected = [
           {
-            "severity": 1,
+            "severity": 2,
             "range": {
               "start": {
                 "line": 2,
@@ -286,7 +426,7 @@ describe("validateTextDocument: Multiple variable definitions tests", ()=> {
             "source": "LinksLSP"
           },
           {
-            "severity": 1,
+            "severity": 2,
             "range": {
               "start": {
                 "line": 3,
@@ -303,6 +443,120 @@ describe("validateTextDocument: Multiple variable definitions tests", ()=> {
         ] as Diagnostic[];
 
       assert.deepStrictEqual(result, expected);
+  });
+
+  it("Should throw a 'variable is defined many times' diagnostic if a variable is declared within a function with the same name as a parameter",  async() => {
+    const fileUri = path.join(baseUri, '2.links');
+    const fileContent = await fs.readFile(fileUri, 'utf8');
+    let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+    await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+    
+    sinon.stub(server, 'getAST').returns(
+        Promise.resolve((
+            AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+        ))
+    );
+
+    let params = TextDocument.create(
+      fileUri.toString(),
+        "links",
+        1,
+        newDocumentText
+    );
+
+    const result = await server.validateTextDocument(params);
+
+    let expected = [
+      {
+        "severity": 2,
+        "range": {
+          "start": {
+            "line": 1,
+            "character": 14
+          },
+          "end": {
+            "line": 1,
+            "character": 15
+          }
+        },
+        "message": "Variable n is defined multiple times",
+        "source": "LinksLSP"
+      },
+      {
+        "severity": 2,
+        "range": {
+          "start": {
+            "line": 2,
+            "character": 8
+          },
+          "end": {
+            "line": 2,
+            "character": 9
+          }
+        },
+        "message": "Variable n is defined multiple times",
+        "source": "LinksLSP"
+      }
+    ] as Diagnostic[];
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("Should throw a 'variable is defined many times' diagnostic if a variable is defined twice in a nested XML block ", async () => {
+    const fileUri = path.join(baseUri, '3.links');
+    const fileContent = await fs.readFile(fileUri, 'utf8');
+    let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+    await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+    
+    sinon.stub(server, 'getAST').returns(
+        Promise.resolve((
+            AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+        ))
+    );
+
+    let params = TextDocument.create(
+      fileUri.toString(),
+        "links",
+        1,
+        newDocumentText
+    );
+
+    const result = await server.validateTextDocument(params);
+
+    let expected = [
+      {
+        "severity": 2,
+        "range": {
+          "start": {
+            "line": 8,
+            "character": 20
+          },
+          "end": {
+            "line": 8,
+            "character": 23
+          }
+        },
+        "message": "Variable dup is defined multiple times",
+        "source": "LinksLSP"
+      },
+      {
+        "severity": 2,
+        "range": {
+          "start": {
+            "line": 9,
+            "character": 20
+          },
+          "end": {
+            "line": 9,
+            "character": 23
+          }
+        },
+        "message": "Variable dup is defined multiple times",
+        "source": "LinksLSP"
+      }
+    ] as Diagnostic[];
+
+    assert.deepStrictEqual(result, expected);
   });
 });
 
@@ -546,6 +800,21 @@ describe("validateTextDocument: Function calls and parameters tests", () => {
           },
           "message": "Incorrect number of arguments.",
           "source": "LinksLSP"
+        },
+        {
+          "severity": 1,
+          "range": {
+            "start": {
+              "line": 7,
+              "character": 4
+            },
+            "end": {
+              "line": 7,
+              "character": 12
+            }
+          },
+          "message": "Runtime error: Type error: The function\n    `foo'\nhas type\n    `(Int, Int, Int) -a-> Int'\nwhile the arguments passed to it have types\n    `Int'\nand\n    `Int'\nand the currently allowed effects are\n    `|b'\nIn expression: foo(1,2).\n",
+          "source": "LinksLSP-Runtime"
         }
       ] as Diagnostic[];
 
@@ -588,6 +857,21 @@ describe("validateTextDocument: Function calls and parameters tests", () => {
           },
           "message": "Incorrect number of arguments.",
           "source": "LinksLSP"
+        },
+        {
+          "severity": 1,
+          "range": {
+            "start": {
+              "line": 7,
+              "character": 4
+            },
+            "end": {
+              "line": 7,
+              "character": 10
+            }
+          },
+          "message": "Runtime error: Type error: The function\n    `foo'\nhas type\n    `(Int, Int) -a-> Int'\nwhile the arguments passed to it have types\n    `Int'\nand the currently allowed effects are\n    `|b'\nIn expression: foo(1).\n",
+          "source": "LinksLSP-Runtime"
         }
       ] as Diagnostic[];
 
@@ -642,6 +926,161 @@ describe("validateTextDocument: Function calls and parameters tests", () => {
       const result = await server.validateTextDocument(params);
 
       let expected = [] as Diagnostic[];
+
+      assert.deepStrictEqual(result, expected);
+  });
+});
+
+describe("validateTextDocument: Runtime error tests", async () => {
+  let server: LanguageServer;
+  let baseUri = path.resolve(__dirname, './validateTextDocumentTests/runtimeError/');
+  let testOcamlClient: OCamlClient;
+  let tempFilePath: string;
+  beforeEach(async ()  => {
+    server = new LanguageServer();
+    testOcamlClient = new OCamlClient("");
+    server.start();
+    tempFilePath = path.join(__dirname, 'temporary.links');
+
+  });
+
+  afterEach(async() => {
+    try {
+        await fs.unlink(tempFilePath);
+        sinon.restore();
+    } catch (error: any) {
+        console.error(`Error deleting temporary file: ${error.message}`);
+        
+    }
+    server.connection.dispose();
+  });
+
+  after(async () => {
+    server.connection.dispose();
+  });
+
+  it("Should throw a runtime error diagnostic if we try and add an integer and a float", async () => {
+    const fileUri = path.join(baseUri, '1.links');
+      const fileContent = await fs.readFile(fileUri, 'utf8');
+      let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+      await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+      
+      sinon.stub(server, 'getAST').returns(
+          Promise.resolve((
+              AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+          ))
+      );
+
+      let params = TextDocument.create(
+        fileUri.toString(),
+          "links",
+          1,
+          newDocumentText
+      );
+
+      const result = await server.validateTextDocument(params);
+
+      let expected = [
+        {
+          "severity": 1,
+          "range": {
+            "start": {
+              "line": 6,
+              "character": 0
+            },
+            "end": {
+              "line": 6,
+              "character": 13
+            }
+          },
+          "message": "Runtime error: Type error: The function\n    `sum'\nhas type\n    `(Int, Int) -a-> Int'\nwhile the arguments passed to it have types\n    `Int'\nand\n    `Float'\nand the currently allowed effects are\n    `|b'\nIn expression: sum(10, 10.0).\n",
+          "source": "LinksLSP-Runtime"
+        }
+      ] as Diagnostic[];
+
+      assert.deepStrictEqual(result, expected);
+  });
+
+  it("Should throw a runtime error diagnostic if we try and use a string inside an XML block", async () => {
+    const fileUri = path.join(baseUri, '2.links');
+      const fileContent = await fs.readFile(fileUri, 'utf8');
+      let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+      await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+      
+      sinon.stub(server, 'getAST').returns(
+          Promise.resolve((
+              AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+          ))
+      );
+
+      let params = TextDocument.create(
+        fileUri.toString(),
+          "links",
+          1,
+          newDocumentText
+      );
+
+      const result = await server.validateTextDocument(params);
+
+      let expected = [
+        {
+          "severity": 1,
+          "range": {
+            "start": {
+              "line": 6,
+              "character": 15
+            },
+            "end": {
+              "line": 6,
+              "character": 31
+            }
+          },
+          "message": "Runtime error: Type error: XML child nodes must have type `Xml', but the expression\n    `{eg_var}'\nhas type\n    `String'\nIn expression: <p> {eg_var}</p>.\n",
+          "source": "LinksLSP-Runtime"
+        }
+      ] as Diagnostic[];
+
+      assert.deepStrictEqual(result, expected);
+  });
+
+  it("Should throw a runtime error diagnostic if we try and use a built-in function and pass a variable with the wrong type", async () => {
+    const fileUri = path.join(baseUri, '3.links');
+      const fileContent = await fs.readFile(fileUri, 'utf8');
+      let newDocumentText = `fun dummy_wrapper(){\n${fileContent}\n}`;
+      await fs.writeFile(tempFilePath, newDocumentText, 'utf8');
+      
+      sinon.stub(server, 'getAST').returns(
+          Promise.resolve((
+              AST.fromJSON(await testOcamlClient.get_AST_as_JSON(`${tempFilePath}\n`), "")
+          ))
+      );
+
+      let params = TextDocument.create(
+        fileUri.toString(),
+          "links",
+          1,
+          newDocumentText
+      );
+
+      const result = await server.validateTextDocument(params);
+
+      let expected = [
+        {
+          "severity": 1,
+          "range": {
+            "start": {
+              "line": 4,
+              "character": 4
+            },
+            "end": {
+              "line": 4,
+              "character": 9
+            }
+          },
+          "message": "Runtime error: Type error: The function\n    `hd'\nhas type\n    `([a]) ~b~> a'\nwhile the arguments passed to it have types\n    `Int'\nand the currently allowed effects are\n    `|c'\nIn expression: hd(x).\n",
+          "source": "LinksLSP-Runtime"
+        }
+      ] as Diagnostic[];
 
       assert.deepStrictEqual(result, expected);
   });

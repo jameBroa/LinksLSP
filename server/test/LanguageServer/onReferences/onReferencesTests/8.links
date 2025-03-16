@@ -1,0 +1,37 @@
+
+fun outter(){
+    var temp = 10;
+    fun inner(){
+        fun innerInner(){
+            fun innerInnerInner(){
+                fun innerInnerInnerInner(){
+                    fun innerInnerInnerInnerInner(){
+                        fun innerInnerInnerInnerInnerInner(){
+                            fun innerInnerInnerInnerInnerInnerInner(){
+                                fun innerInnerInnerInnerInnerInnerInnerInner(){
+                                    fun innerInnerInnerInnerInnerInnerInnerInnerInner(){
+                                        fun innerInnerInnerInnerInnerInnerInnerInnerInnerInner(){
+                                            temp
+                                        }
+                                        innerInnerInnerInnerInnerInnerInnerInnerInnerInner()+temp
+                                    }
+                                    innerInnerInnerInnerInnerInnerInnerInnerInner()+temp
+                                }
+                                innerInnerInnerInnerInnerInnerInnerInner()+temp
+                            }
+                            innerInnerInnerInnerInnerInnerInner()
+                        }
+                        innerInnerInnerInnerInnerInner()
+                    }
+                    innerInnerInnerInnerInner()+temp
+                }
+                innerInnerInnerInner()
+            }
+            innerInnerInner()
+        }
+        innerInner()
+    }
+    inner()
+}
+
+outter()

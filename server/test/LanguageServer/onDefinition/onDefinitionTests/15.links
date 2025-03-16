@@ -1,0 +1,12 @@
+fun shadowTest() {
+  var x = 10;
+  
+  fun innerFunction() {
+    var x = 20;  # Shadow outer x
+    x
+  }
+  
+  x + innerFunction()
+}
+
+shadowTest()

@@ -1,0 +1,7 @@
+fun assignment() {
+  var original = 42;
+  var copy = original;
+  original * copy
+}
+
+assignment()

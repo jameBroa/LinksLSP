@@ -1,0 +1,14 @@
+fun customFunction(){
+    4
+}
+
+fun main(){
+    page
+        <html> 
+            <body> 
+                <h1>{intToXml(custo)}</h1>
+            </body>
+        </html>
+}
+
+main()

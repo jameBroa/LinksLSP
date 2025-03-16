@@ -1,0 +1,12 @@
+fun foo(){
+    var customVar = 10;
+    page
+        <html> 
+            <body> 
+                <p>{intToXml(cust)}</p>
+            </body>
+        </html>
+
+}
+
+foo()

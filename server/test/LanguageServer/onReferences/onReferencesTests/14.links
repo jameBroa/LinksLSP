@@ -1,0 +1,11 @@
+
+fun processItem(x){
+  x*2
+}
+
+
+fun process(list){
+  for(x <- list) [processItem(x)]
+}
+
+process([1,2,3,4,5])

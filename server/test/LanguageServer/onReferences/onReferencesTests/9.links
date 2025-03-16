@@ -1,0 +1,7 @@
+
+
+fun list_comp(input){
+    for(x <- input) [x]
+}
+
+list_comp([1,2,3,4])

@@ -1,0 +1,19 @@
+
+fun something(s){
+    s
+}
+
+fun ref_from_variant(){
+    receive {
+        case Suggest(s) -> something(s) 
+        case NewDef(defined) ->
+          something(undefined) + something(undefined)
+    }
+}
+
+fun main(){
+    var pid = spawn {ref_from_variant()};
+    pid
+}
+
+main()

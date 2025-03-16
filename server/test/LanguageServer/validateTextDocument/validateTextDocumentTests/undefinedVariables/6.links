@@ -1,0 +1,13 @@
+
+fun calculate(num){
+    num*2
+}
+
+fun temp(input){
+    switch(input){
+        case x::xs -> calculate(x) + calculate(xx) + temp(xs)
+        case [] -> calculate(0)
+    }
+}
+
+temp([1,2,3,4])

@@ -1,0 +1,35 @@
+
+fun something(s){
+    s
+}
+
+fun ref_from_variant(){
+    receive {
+        case Suggest(s) -> something(s) 
+        case NewDef(def) ->
+          something(def) + something(def)
+    }
+}
+
+fun eg(){
+    page
+    <html>
+        <body> 
+        {
+            receive{
+                case Suggest(s) -> something(s)
+                case NewDef(def) -> something(def)
+            }
+        }
+        </body>
+    </html>
+}
+
+
+
+fun main(){
+    var pid = spawn {ref_from_variant()};
+    pid
+}
+
+main()

@@ -151,6 +151,8 @@ export class LSPFeatureHandler implements NodeInterface {
                 }
             }
         }
+        console.log("functionReferences", Array.from(this.functionReferences.keys()));
+
         console.log("variableDefinitions", Array.from(this.variableDefinitions.keys()));
         console.log("variableReferences", Array.from(this.variableReferences.keys()));
 
@@ -324,7 +326,11 @@ export class LSPFeatureHandler implements NodeInterface {
     }
 
     public async GetDocumentSymbols(): Promise<DocumentSymbol[]> {
-        return ExtractDocumentSymbols(this.tree, this.variableDefinitions, this.functionDefinitions);
+        let symbols = ExtractDocumentSymbols(this.tree, this.variableDefinitions, this.functionDefinitions);
+
+        console.log(`[GetDocumentSymbols] symbols: ${JSON.stringify(symbols, AST.removeParentField, 2)}`);
+
+        return symbols;
     }
 
 }

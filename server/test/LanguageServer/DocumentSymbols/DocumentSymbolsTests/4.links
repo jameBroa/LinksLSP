@@ -1,0 +1,42 @@
+
+var apple = 10;
+
+fun outter(){
+    var x = 10;
+    fun inner(){
+        var y = 10;
+        fun inner_inner(){
+            var z = 10;
+            5
+        }
+        inner_inner()
+    }
+    inner()
+}
+
+fun test(){
+    var x = 10;
+    fun something(){
+        var y = 10;
+        fun new(){
+            var z = 10;
+            5
+        }
+        new()
+    }
+    something()
+}
+
+fun test_two(){
+    fun something(){
+        var temp = 5;
+        5
+    }
+    fun banana(){
+        5
+    }
+    something()
+}
+var pear = 24;
+
+apple + test()

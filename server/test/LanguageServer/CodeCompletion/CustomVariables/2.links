@@ -1,0 +1,5 @@
+fun foo(input_list){
+    for(customVar <- input_list) [cust]
+}
+
+foo([1,2,3,4])

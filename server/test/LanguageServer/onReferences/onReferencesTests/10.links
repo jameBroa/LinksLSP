@@ -1,0 +1,21 @@
+fun eg_page(){
+    var name = "John";
+    var age = 24;
+    var height = 175.0;
+    page
+        <html>
+            <head> 
+            
+            </head>
+            <body> 
+                <div> 
+                    <p>{stringToXml(name)}</p>
+                    <p>{intToXml(age)}</p>
+                    <p>{floatToXml(height)}</p>
+                </div>
+            </body>
+
+        </html>
+}
+
+eg_page()

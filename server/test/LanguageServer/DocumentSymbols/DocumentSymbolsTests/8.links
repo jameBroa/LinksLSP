@@ -1,0 +1,22 @@
+fun test(){
+    page
+        <html>
+            <body> 
+                <p> 
+                {
+                var height_in_cm = 183;
+                fun convert_to_inches(input_height){
+                    fun convert_result_to_XML(input_height_in_inches){
+                        floatToXml(input_height_in_inches)
+                    }
+                    convert_result_to_XML(intToFloat(input_height) /. 2.54)
+                }
+                convert_to_inches(height_in_cm)
+                }
+                </p>
+            </body>
+        </html>
+}
+
+test()
+

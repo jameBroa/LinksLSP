@@ -1,0 +1,83 @@
+fun topLevel1() {
+  fun level1A() {
+    fun level2A() {
+      fun level3A() { 42 }
+      fun level3B(x) { x + level3A() }
+      level3B(5)
+    }
+    
+    fun level2B(y) {
+      fun level3C(z) { y * z }
+      fun level3D() {
+        fun level4A() { 
+          "42" 
+        }
+        level4A()
+      }
+      level3C(10) + stringToInt(level3D())
+    }
+    
+    level2A() + level2B(7)
+  }
+  
+  fun level1B() {
+    fun functionVar(a) {
+      fun insideAnon(b) {
+        a + b
+      }
+      insideAnon(10)
+    }
+    
+    functionVar(5)
+  }
+  
+  level1A() * level1B()
+}
+
+fun topLevel2(param) {
+  fun recursive(n) {
+    if (n <= 1) 1
+    else n * recursive(n-1)
+  }
+  
+  fun returnsFunction(x) {
+    fun returned(y) {
+      x * y
+    }
+    returned(2)
+  }
+  
+  fun multipleParams(a, b, c) {
+    fun innerMulti(d, e) {
+      fun deepestMulti(f) {
+        a + b + c + d + e + f
+      }
+      deepestMulti
+    }
+    innerMulti(4, 5)(6)
+  }
+  
+  recursive(param) + returnsFunction(2) + multipleParams(1, 2, 3)
+}
+
+fun topLevel3() {
+  fun siblingA() { 1 }
+  fun siblingB() { 2 }
+  fun siblingC() { 3 }
+  
+  fun container() {
+    fun nestedSiblingA() { 4 }
+    fun nestedSiblingB() { 5 }
+    fun nestedSiblingC() {
+      fun deepNested1() { 6 }
+      fun deepNested2() { 7 }
+      deepNested1() + deepNested2()
+    }
+    nestedSiblingA() + nestedSiblingB() + nestedSiblingC()
+  }
+  
+  siblingA() + siblingB() + siblingC() + container()
+}
+
+
+topLevel1() + topLevel2(5) + topLevel3()

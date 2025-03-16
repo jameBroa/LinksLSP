@@ -23,7 +23,10 @@
 		"test:semanticTokens": "mocha test/LanguageServer/SemanticTokens/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
 		"test:onDefinition": "mocha test/LanguageServer/onDefinition/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
 		"test:onReferences": "mocha test/LanguageServer/onReferences/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
-		"test:validateTextDocument": "mocha test/LanguageServer/validateTextDocument/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs"
+		"test:validateTextDocument": "mocha test/LanguageServer/validateTextDocument/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
+		"test:documentSymbols": "mocha test/LanguageServer/DocumentSymbols/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
+		"test:hovertips": "mocha test/LanguageServer/HoverTips/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs",
+		"test:onComplete": "mocha test/LanguageServer/CodeCompletion/**/*.test.ts  -r ts-node/register --node-ipc --recursive --require mocha-suppress-logs"
 	},
 	"devDependencies": {
 		"@types/execa": "^0.9.0",

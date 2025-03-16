@@ -201,6 +201,7 @@ export namespace Function{
     }
 
     function CreateFnApplNode(node: AST.ASTNode, range: Range, parent: AST.ASTNode){
+        console.log(`creating FnAppl node`);
         return {
             type: "Node",
             value: "FnAppl",
@@ -221,6 +222,7 @@ export namespace Function{
                 let funNode: AST.ASTNode = currentNode;
 
                 if(FunctionConditions.isFunctionReferenceInFormBinding(currentNode)){
+                    console.log(`in form binding`);
                     funName = Variable.getName(currentNode);
                     scopeNode = currentNode.parent!;
                     let newRange = Range.create(
@@ -244,6 +246,8 @@ export namespace Function{
                     // } as FunctionNode;
                     // addToXNode(references, funName, functionNode);
                 } else if (FunctionConditions.isFormletPlacement(currentNode)) {
+                    console.log(`in formlet placement`);
+
                     funName = Variable.getName(currentNode);
                     scopeNode = currentNode.parent!;
 

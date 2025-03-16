@@ -1,0 +1,18 @@
+fun eg(){
+  page
+    <html>
+      <body>
+        {
+          fun exampleFun(){
+            <div>
+              <p>Example!</p>
+            </div>
+          }
+
+          exampleFun()
+        }
+      </body>
+    </html>
+}
+
+eg()

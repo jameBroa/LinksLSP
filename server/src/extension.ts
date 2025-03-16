@@ -245,16 +245,15 @@ export class LanguageServer {
   }
 
   public async onDocumentSymbol(params: any): Promise<DocumentSymbol[]> {
-    console.log(`[onDocumentSymbol] handleASTAndDocumentText`);
     const {ast, documentText} = await this.HandleASTAndDocumentText(params);
+    console.log(`[ast]: ${JSON.stringify(ast, AST.removeParentField, 2)}`);
+    console.log(`[documentText]: ${documentText}`);
     if(ast === null || documentText === "") {
       return [];
     }
 
     const handler = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
     return handler.GetDocumentSymbols();
-
-
   }
 
   public async onRename(params: RenameParams): Promise<WorkspaceEdit | null> {
@@ -290,10 +289,12 @@ export class LanguageServer {
     let position;
 
     position = Position.create(
-      params.position.line+2, params.position.character
+      params.position.line+2, params.position.character+2
     );
 
-    const referenceNode = AST.getClosestNodeFromAST(ast, position);
+    // const referenceNode = AST.getClosestNodeFromAST(ast, position);
+    const referenceNode = AST.myAttempt(ast, position);
+    console.log(`position: ${JSON.stringify(position)}`);
   
     const node = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
 
@@ -311,9 +312,7 @@ export class LanguageServer {
     }
 
     if(env === ENV_MODE.FAST) {
-      // node.PrintAllFunVarRefNDef();
-      // console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
-
+      console.log(`[LanguageServer.OnReferences] LinksNodeReferences: ${JSON.stringify(LinksNodeReferences, AST.removeParentField, 2)}`);
       return LinksNodeReferences;
     }
     
@@ -516,7 +515,7 @@ export class LanguageServer {
 
     try {
         // Write the in-memory content to the temporary file
-        await fs.writeFile(tempFilePath, `fun dummy_wrapper(){\n${documentContent}\n()\n}`, 'utf8');
+        await fs.writeFile(tempFilePath, `fun dummy_wrapper(){\n${documentContent}\n}`, 'utf8');
         // console.log(`[LanguageServer.getASTFromText] content to generate ast on: \n"fun dummy_wrapper(){\n${documentContent}\n}"`);
         const tempFileContent = await fs.readFile(tempFilePath, 'utf8');
 
@@ -552,7 +551,9 @@ export class LanguageServer {
       return null;
     }
 
-    const referenceNode = AST.findNodeAtPosition(
+    console.log(`position: ${JSON.stringify(params.position)}`);
+
+    const referenceNode = AST.myAttempt(
       ast, 
       Position.create(
         params.position.line+2,
@@ -578,21 +579,26 @@ export class LanguageServer {
     }
     return null;
   }
-  private async onHover(params: TextDocumentPositionParams): Promise<Hover | null> {
-    
+  public async onHover(params: TextDocumentPositionParams): Promise<Hover | null> {
     const document = this.documents.get(params.textDocument.uri);
 
     let {ast, documentText} = await this.HandleASTAndDocumentText(params);
-    if(ast === null || documentText === "" || !document) {
+    console.log(`[onHover] documentText: ${documentText}`);
+    if(ast === null || documentText === "") {
       return null;
     }
 
-    console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
+    console.log(`[position] ${JSON.stringify(params.position)}`);
+    // console.log(`[ast] ${JSON.stringify(ast, AST.removeParentField, 2)}`);
     try{
-    const referenceNode = AST.getClosestNodeFromAST(ast, Position.create(params.position.line+2, params.position.character));
+    const referenceNode = AST.myAttempt(ast, Position.create(params.position.line+2, params.position.character));
+    if(referenceNode === null) {
+      return null;
+    }
     const featureHandler = new LSPFeatureHandler(ast.children![0], params.textDocument.uri);
     console.log(`referenceNode.value: ${referenceNode.value}`);
     let hover: Hover | null = featureHandler.HandleHover(referenceNode.parent!);
+    console.log(`[onHover] hover: ${JSON.stringify(hover, null, 2)}`);
     return hover;
     } catch (e){
       console.error(`[onHover] Error: ${e}`);
@@ -647,11 +653,14 @@ export class LanguageServer {
           0, 0
         )
       } as TextDocumentPositionParams;
+      console.log(`[validateTextDocument textdocument URI]: ${textDocument.uri}`)
       let document = this.documents.get(textDocument.uri);
       if(!document || this.documents.get(textDocument.uri) === null) {
-        return [];
+        document = TextDocument.create(textDocument.uri, 'links', 0, textDocument.getText());
+        documentText = textDocument.getText();
+      } else {
+        documentText = this.documents.get(textDocument.uri)!.getText();
       }
-      documentText = this.documents.get(textDocument.uri)!.getText();
 
       console.log(`[validateTextDocument] getAST`);
       ast = await this.getAST(payload);
@@ -695,7 +704,7 @@ export class LanguageServer {
     this.db_tables = tables;
     this.db_schemas = schemas;
   }
-  private async onCompletion(params: TextDocumentPositionParams): Promise<CompletionItem[]> {
+  public async onCompletion(params: TextDocumentPositionParams): Promise<CompletionItem[]> {
     if(env === ENV_MODE.FAST) {
       const {ast, documentText} = await this.HandleASTAndDocumentText(params);
       if(ast === null || documentText === "") {
@@ -707,12 +716,13 @@ export class LanguageServer {
         params.textDocument.uri
       );
       const newpos = RangeReplacer.ConvertParamsPos(params.position);
-      let completion = featureHandler.HandleCompletion(
+      let completion = await featureHandler.HandleCompletion(
         newpos, 
         documentText,
         this.db_tables,
         this.db_schemas
       );
+      console.log(`completion res: ${JSON.stringify(completion, null, 2)}`)
       return completion; 
 
     }
@@ -810,6 +820,7 @@ public async onRequestFull(params: any) {
       if(env === ENV_MODE.FAST) {
         // this.debouncedValidation(documentText);
         // await this.validateTextDocument(params.textDocument);
+        console.log(`[onRequestFull] result:  \n[${SemanticTokensNew.data!}]`);
         return SemanticTokensNew;
       }
     } catch (e: any) {
@@ -827,7 +838,7 @@ public async onRequestFull(params: any) {
     return semanticTokens;
   }
 
-  private async HandleASTAndDocumentText(params: any): Promise<{ast: AST.ASTNode | null, documentText: string}> {
+  public async HandleASTAndDocumentText(params: any): Promise<{ast: AST.ASTNode | null, documentText: string}> {
     let ast;
     let documentText = "";
     if(this.documentsMap.has(params.textDocument.uri)) {
@@ -836,12 +847,14 @@ public async onRequestFull(params: any) {
       documentText = this.documentsMap.get(params.textDocument.uri)!;
     } else {
       // this is for when the file is first loaded
+      console.log(`[HandleASTAndDocumentText] getAST`);
       ast = await this.getAST(params);
+      console.log(`[ast]: ${JSON.stringify(ast, AST.removeParentAndChildren, 2)}`);
       let temp = this.documents.get(params.textDocument.uri);
-      if(temp === null){
+      if(temp === null || temp===undefined){
         return {ast: null, documentText: ""};
       }
-      documentText = temp!.getText();
+      documentText = temp.getText();
     }
 
     if(!ast){

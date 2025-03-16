@@ -1,0 +1,9 @@
+
+fun another(names, ages){
+  for ((name, age) <- zip(names, ages)) [(name, age)]
+}
+
+var names = ["Alice", "Bob", "Charlie"];
+var ages = [25, 17, 30];
+
+another(names, ages)

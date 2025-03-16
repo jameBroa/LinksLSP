@@ -418,7 +418,7 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
 
     let split_by_line = documentText.split("\n");
 
-    // console.log(`[ExtractXML] all_xml: ${JSON.stringify(all_xml, AST.removeParentAndChildren, 2)}`);
+    console.log(`[ExtractXML] all_xml: ${JSON.stringify(all_xml, AST.removeParentAndChildren, 2)}`);
 
     xml_text = all_xml.filter((node) => {
         return node.value.substring(0, 9) === "TextNode:";
@@ -435,7 +435,108 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
 
     // console.log(`[ExtractXML] declarations: ${JSON.stringify(declarations, AST.removeParentField, 2)}`);
 
+    function ExtractAllTags(all_xml: AST.ASTNode[]): AST.ASTNode[] {
+        const xml_no_text = all_xml.filter((node) => {
+            return node.value.substring(0, 9) !== "TextNode:";
+        });
+        
+        const extracted_tags: AST.ASTNode[] = [];
+        const document_lines = documentText.split("\n");
+        
+        const openingTagPattern = new RegExp(`<(?!/)`, 'g');
+        const openingTagPatternAlt = new RegExp(`</`, 'g');
+        const closingTagPattern = new RegExp(`>`, 'g');
+        const closingTagPatternAlt = new RegExp(`/>`, 'g');
+        
+        // For each XML node
+        for (const node of xml_no_text) {
+            const startLine = node.range.start.line-2;
+            const endLine = node.range.end.line-2;
+            console.log(`searching for elem: ${JSON.stringify(node, AST.removeParentAndChildren, 2)}`);
+            
+            // Process each line in the node's range
+            for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
+                let currentLine = document_lines[lineNum];
+                console.log(`currentLine: ${currentLine}`)
+                let startIndex = 0;
+                let endIndex = currentLine.length;
+                
+                let match;
+                while ((match = openingTagPattern.exec(currentLine)) !== null) {
+                    const tagNode: AST.ASTNode = {
+                        type: "Node",
+                        value: "Opening tag: <",
+                        range: Range.create(
+                            Position.create(lineNum+2, startIndex + match.index+2),
+                            Position.create(lineNum+2, startIndex + match.index +3)
+                        ),
+                        parent: node.parent,
+                        children: []
+                    };
+                    extracted_tags.push(tagNode);
+                }
+                
+                // Find opening tags </
+                openingTagPatternAlt.lastIndex = 0; // Reset regex state
+                while ((match = openingTagPatternAlt.exec(currentLine)) !== null) {
+                    console.log(`Found </ match at line ${lineNum} (${lineNum+2}), index ${match.index}: "${currentLine.substring(match.index, match.index+2)}"`);
 
+                    const tagNode: AST.ASTNode = {
+                        type: "Node",
+                        value: "Closing tag: </",
+                        range: Range.create(
+                            Position.create(lineNum+2, startIndex + match.index+2),
+                            Position.create(lineNum+2, startIndex + match.index + 4)
+                        ),
+                        parent: node.parent,
+                        children: []
+                    };
+                    extracted_tags.push(tagNode);
+                }
+                
+                // Find closing tags >
+                closingTagPattern.lastIndex = 0; // Reset regex state
+                while ((match = closingTagPattern.exec(currentLine)) !== null) {
+                    // Skip if this is part of />
+                    if (match.index > 0 && currentLine[match.index - 1] === '/') {
+                        continue;
+                    }
+                    
+                    const tagNode: AST.ASTNode = {
+                        type: "Node",
+                        value: "Closing tag: >",
+                        range: Range.create(
+                            Position.create(lineNum+2, startIndex + match.index+2),
+                            Position.create(lineNum+2, startIndex + match.index + 3)
+                        ),
+                        parent: node.parent,
+                        children: []
+                    };
+                    extracted_tags.push(tagNode);
+                }
+                
+                // Find closing tags />
+                closingTagPatternAlt.lastIndex = 0; // Reset regex state
+                while ((match = closingTagPatternAlt.exec(currentLine)) !== null) {
+                    const tagNode: AST.ASTNode = {
+                        type: "Node",
+                        value: "Self-closing tag: />",
+                        range: Range.create(
+                            Position.create(lineNum+2, startIndex + match.index+2),
+                            Position.create(lineNum+2, startIndex + match.index + 4)
+                        ),
+                        parent: node.parent,
+                        children: []
+                    };
+                    extracted_tags.push(tagNode);
+                }
+            }
+        }
+        
+        return extracted_tags;
+    }
+
+    const regex_tags = ExtractAllTags(all_xml);
 
 
     for(const node of declarations){
@@ -542,7 +643,7 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
         return node.value !== "xmlTag" && node.value !== "xmlAttribute";
     });
   
-    // xml_tags = xml_semantics.filter((node) => {
+    // let old_xml_tags = xml_semantics.filter((node) => {
     //     return node.value === "xmlTag";
     // });
 
@@ -550,9 +651,15 @@ export function ExtractXML(all_xml: AST.ASTNode[], documentText: string): {xml_d
         return node.value === "xmlAttribute";
     });
 
-    // console.log(`[ExtractXML] xml_tags: ${JSON.stringify(xml_tags, AST.removeParentAndChildren, 2)}`);
+    for(const text of xml_text){
+        text.range.end.character = text.range.end.character-1;
+    }
 
-    return {xml_declarations:new_xml_declarations, xml_tags, xml_attributes:new_xml_attributes, xml_text: xml_text};
+
+
+    // console.log(`[ExtractXML] xml_tags: ${JSON.stringify(xml_tags, AST.removeParentAndChildren, 2)}`);
+    console.log(`[REGEX] regex_tags: ${JSON.stringify(regex_tags, AST.removeParentAndChildren, 2)}`);
+    return {xml_declarations:new_xml_declarations, xml_tags:regex_tags, xml_attributes:new_xml_attributes, xml_text: xml_text};
 }
 
 
