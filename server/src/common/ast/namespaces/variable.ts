@@ -196,14 +196,14 @@ export namespace Variable {
                     hasValidParent(node) 
                     
                 ) 
-                || isIteration(node) 
-                || isDatabase(node)
-                || isRecord(node)
-                || isInCase(node)
-                || isInCaseForTuple(node)
-                || isLName(node)
-                || isSwitchListDestructering(node)
-                || isIterationTuple(node)
+                || isIteration(node)  //done
+                || isDatabase(node) //done
+                || isRecord(node) // done
+                || isInCase(node) // done
+                || isInCaseForTuple(node) // done
+                || isLName(node) //done 
+                || isSwitchListDestructering(node) //done
+                || isIterationTuple(node) //done
             );
            
         }

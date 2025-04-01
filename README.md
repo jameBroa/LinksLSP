@@ -47,6 +47,10 @@ This will produce a `.VSIX' file which you can install via VSCode extension sect
 
 ## Release Notes
 
+### 01/04/25
+- Fixed small bug with built in function hover returning wrong types for built-in functions.
+- Adjusted Unit tests
+
 ### 16/03/25
 One of the last updates made. Probably won't add more updates unless necessary after this one.
 - Added ALL unit tests over all features

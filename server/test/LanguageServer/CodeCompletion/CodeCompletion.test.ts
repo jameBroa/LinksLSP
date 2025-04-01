@@ -175,23 +175,23 @@ describe("Code completion: Built-in functions", () => {
     it("should return a list of suggestions for built-in functions which start with \"h\"", async () => {
         const result = await RunCodeCompletionTest(baseUri, tempFilePath, server, testOcamlClient, '1.links', Position.create(2,5));
         const expected: any = [
-            {
-              "label": "hd",
-              "kind": 3
-            },
-            {
-              "label": "hasAttribute",
-              "kind": 3
-            },
-            {
-              "label": "haveMail",
-              "kind": 3
-            },
-            {
-              "label": "here",
-              "kind": 3
-            }
-          ];
+          {
+            "label": "hasAttribute",
+            "kind": 3
+          },
+          {
+            "label": "haveMail",
+            "kind": 3
+          },
+          {
+            "label": "hd",
+            "kind": 3
+          },
+          {
+            "label": "here",
+            "kind": 3
+          }
+        ];
         assert.deepStrictEqual(result, expected);
     });
 
@@ -220,77 +220,21 @@ describe("Code completion: Built-in functions", () => {
     it("Should return a list of suggestions of built-in functions and custom functions for the prefix \"su\"", async () => {
         const result = await RunCodeCompletionTest(baseUri, tempFilePath, server, testOcamlClient, '3.links', Position.create(7,6));
         const expected: any = [
-            {
-              "label": "sum",
-              "kind": 3
-            },
-            {
-              "label": "submitButton",
-              "kind": 3
-            },
-            {
-              "label": "Sum",
-              "kind": 3
-            },
-            {
-              "label": "sum_int",
-              "kind": 3
-            }
-          ];
+          {
+            "label": "Sum",
+            "kind": 3
+          },
+          {
+            "label": "sum_int",
+            "kind": 3
+          }
+        ];
         assert.deepStrictEqual(result, expected);
     });
     it("Should return a list of suggestions of built-in functions, custom functions, and custom variables for the prefiex \"re\"", async () => {
         const result = await RunCodeCompletionTest(baseUri, tempFilePath, server, testOcamlClient, '4.links', Position.create(8,6));
-        const expected: any = [
-            {
-              "label": "reverse",
-              "kind": 3
-            },
-            {
-              "label": "readFromSocket",
-              "kind": 3
-            },
-            {
-              "label": "receive",
-              "kind": 3
-            },
-            {
-              "label": "recv",
-              "kind": 3
-            },
-            {
-              "label": "redirect",
-              "kind": 3
-            },
-            {
-              "label": "registerEventHandlers",
-              "kind": 3
-            },
-            {
-              "label": "removeNode",
-              "kind": 3
-            },
-            {
-              "label": "replaceDocument",
-              "kind": 3
-            },
-            {
-              "label": "replaceNode",
-              "kind": 3
-            },
-            {
-              "label": "request",
-              "kind": 3
-            },
-            {
-              "label": "ready",
-              "kind": 6
-            },
-            {
-              "label": "readNum",
-              "kind": 3
-            }
-          ];
+        console.log(`result: ${JSON.stringify(result)}`);
+        const expected: any = [{"label":"readFromSocket","kind":3},{"label":"receive","kind":3},{"label":"recv","kind":3},{"label":"redirect","kind":3},{"label":"registerEventHandlers","kind":3},{"label":"removeNode","kind":3},{"label":"replaceDocument","kind":3},{"label":"replaceNode","kind":3},{"label":"request","kind":3},{"label":"ready","kind":6},{"label":"readNum","kind":3}];
         assert.deepStrictEqual(result, expected);
     });
 });

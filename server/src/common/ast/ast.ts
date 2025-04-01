@@ -789,7 +789,8 @@ export namespace AST {
                     endCharDiff = Math.abs(endChar - position.character);
                 }
 
-                if(startCharDiff < MIN_START_CHAR_DIFF || (startCharDiff === MIN_START_CHAR_DIFF && endCharDiff < MIN_END_CHAR_DIFF)){
+                if(startCharDiff < MIN_START_CHAR_DIFF || (startCharDiff === MIN_START_CHAR_DIFF 
+                    && endCharDiff < MIN_END_CHAR_DIFF)){
                     MIN_START_CHAR_DIFF = startCharDiff;
                     MIN_END_CHAR_DIFF = endCharDiff;
                     bestNode = node;

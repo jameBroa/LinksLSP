@@ -123,7 +123,7 @@ describe("HoverTips: All tests", () => {
         const expected: any = {
             "contents": {
               "kind": "markdown",
-              "value": "### Built in Links function: intToXml\n**Type:** (Int)->String\n```links\nfun intToXml() {\n"
+              "value": "### Built in Links function: intToXml\n**Type:** (Int) -> Xml\n```links\nfun intToXml() {\n"
             },
             "range": {
               "start": {
@@ -152,7 +152,7 @@ describe("HoverTips: All tests", () => {
         const expected: any = {
             "contents": {
               "kind": "markdown",
-              "value": "### Built in Links function: getAttribute\n**Type:** (Xml,String)~>String\n```links\nfun getAttribute() {\n"
+              "value": "### Built in Links function: getAttribute\n**Type:** (Xml, String) ~> String\n```links\nfun getAttribute() {\n"
             },
             "range": {
               "start": {
@@ -181,7 +181,7 @@ describe("HoverTips: All tests", () => {
         const expected: any = {
             "contents": {
               "kind": "markdown",
-              "value": "### Built in Links function: stringToXml\n**Type:** (String)->Int\n```links\nfun stringToXml() {\n"
+              "value": "### Built in Links function: stringToXml\n**Type:** (String) -> Xml\n```links\nfun stringToXml() {\n"
             },
             "range": {
               "start": {
@@ -267,7 +267,7 @@ describe("HoverTips: All tests", () => {
         const expected: any = {
             "contents": {
               "kind": "markdown",
-              "value": "### Built in Links function: floatToString\n**Type:** (Float)->String\n```links\nfun floatToString() {\n"
+              "value": "### Built in Links function: floatToString\n**Type:** (Float) -> String\n```links\nfun floatToString() {\n"
             },
             "range": {
               "start": {
