@@ -231,7 +231,7 @@
                         document.getElementById('confirm-details').textContent = message.data.host;
                         break;
                     case 'confirmUserCreds':
-                        document.getElementById('creds').textContent = message.data.username;
+                        document.getElementById('creds').textContent = message.userData.username;
                         break;
                     case 'allDatabases':
                         const dbSelect = document.getElementById('database-options');
@@ -258,7 +258,7 @@
             <p>This extension was created by James Broadhurst for his dissertation project at The University of Edinburgh</p>
             
 
-            <div class="dropdown-section">
+            <!-- <div class="dropdown-section">
                 <div class="dropdown-header" onclick="toggleDropdown('dropdown-content-table', 'dropdown-open-indicator-table')">
                     <h4 id="dropdown-open-indicator-table">+</h4>
                     <h4>Table manipulation</h4>
@@ -267,14 +267,13 @@
                     <p class="underline">Automatic code generation</p>
                     <p>Select table to add:</p>
                     <select class="select-menu" id="select-table-for-generation">
-                        <!-- Filled with options -->
                     </select>
                     <button onclick="handleGenerateTableCode(document.getElementById('select-table-for-generation').value)">
                         Generate code
                     </button>
                 </div>
 
-            </div>
+            </div> -->
 
             <div class="dropdown-section">
                 <div class="dropdown-header" onclick="toggleDropdown('dropdown-content-db', 'dropdown-open-indicator')">

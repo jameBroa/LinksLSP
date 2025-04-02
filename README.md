@@ -47,6 +47,11 @@ This will produce a `.VSIX' file which you can install via VSCode extension sect
 
 ## Release Notes
 
+### 02/04/25
+- Removed unnecessary dropdown menu from side panel
+- Fixed bug with side panel
+- Added `addRoute` to the built-in functions
+
 ### 01/04/25
 - Fixed small bug with built in function hover returning wrong types for built-in functions.
 - Adjusted Unit tests
